@@ -48,6 +48,16 @@ class DynamicReteiever:
         indices = indices.tolist()
         return indices
     
+    def find_least_similar_index(self,sample_list):
+        embed_list = [sample.embed for sample in sample_list]
+        # 计算prototype（类中心），即embed list 的平均
+        prototype = torch.mean(torch.stack(embed_list), dim=0)
+        # 计算 embed_list 中每个元素和 prototype 的相似度
+        similarities = torch.cosine_similarity(torch.stack(embed_list), prototype.unsqueeze(0))
+        # 找到与 prototype 最不相似的元素的索引
+        least_similar_index = torch.argmin(similarities).item()
+        return least_similar_index
+    
     def update(self):
         if len(self.pool) == 0:
             return
@@ -92,8 +102,10 @@ class DynamicReteiever:
                 self.demonstrations.append(s)
                 self.label2sample[label].remove(sample_list[least_similar_index])
                 self.label2sample[label].append(s)
+            
+            assert len(self.demonstrations) == 500
 
-    def update_based_on_balance(self,samples_to_remove):
+    def update_based_on_balance_random(self,samples_to_remove):
         # 遍历 samples_to_remove
         for sample in samples_to_remove:
             label = sample.label
@@ -118,9 +130,65 @@ class DynamicReteiever:
                         removed_sample = random.choice(samples_list)
                         self.label2sample[key].remove(removed_sample)
                         self.demonstrations.remove(removed_sample)
-              
+                        break
             else: #随机换掉一个
                 sample_list = self.label2sample[label]
                 removed_sample = random.choice(sample_list)
                 self.label2sample[label].remove(removed_sample)
                 self.demonstrations.remove(removed_sample)
+                self.demonstrations.append(sample)
+                self.label2sample[label].append(sample)
+
+            assert len(self.demonstrations) == 500
+
+    def update_based_on_balance_prototype(self,samples_to_remove):
+        # 遍历 samples_to_remove
+        for sample in samples_to_remove:
+            label = sample.label
+            query_embed = sample.embed
+            # 如果这个类不在 self.label2sample 中, 则直接加入到memory bank中，
+            if label not in self.label2sample:
+                self.demonstrations.append(sample)
+                self.label2sample[label] = [sample]
+                for key,samples_list in self.label2sample.items():
+                    if len(samples_list) > 5:
+                        # 删掉离中心点（prototype）最远的
+                        least_similar_index = self.find_least_similar_index(samples_list)
+                        removed_sample = sample_list[least_similar_index]
+                        self.label2sample[key].remove(removed_sample)
+                        self.demonstrations.remove(removed_sample)
+                        break
+            elif len(self.label2sample[label]) < 5:
+                self.demonstrations.append(sample)
+                self.label2sample[label].append(sample)
+                for key,samples_list in self.label2sample.items():
+                    if len(samples_list) > 5:
+                        # 删掉离中心点（prototype）最远的
+                        least_similar_index = self.find_least_similar_index(samples_list)
+                        removed_sample = sample_list[least_similar_index]
+                        self.label2sample[key].remove(removed_sample)
+                        self.demonstrations.remove(removed_sample)
+                        break
+            else: # 删掉离中心点（prototype）最远的
+                sample_list = self.label2sample[label]
+                embed_list = [sample.embed for sample in sample_list]
+
+                # 计算prototype（类中心），即embed list 的平均
+                prototype = torch.mean(torch.stack(embed_list), dim=0)
+
+                # 计算 query_embed 和 prototype 的 cosine similarity
+                query_similarity = torch.cosine_similarity(query_embed.unsqueeze(0), prototype.unsqueeze(0)).item()
+
+                # 计算 embed_list 中每个元素和 prototype 的相似度
+                similarities = torch.cosine_similarity(torch.stack(embed_list), prototype.unsqueeze(0))
+
+                # 找到与 prototype 最不相似的元素的索引
+                least_similar_index = torch.argmin(similarities).item()
+
+                # 判断是否需要替换
+                if query_similarity > similarities[least_similar_index]:
+                    # 替换 memory bank 中最不相似的 sample
+                    self.demonstrations.remove(sample_list[least_similar_index])
+                    self.demonstrations.append(sample)
+                    self.label2sample[label].remove(sample_list[least_similar_index])
+                    self.label2sample[label].append(sample)

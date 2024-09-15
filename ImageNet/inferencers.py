@@ -167,9 +167,9 @@ class Online_ICL:
     
     def process_dict(self,sample):
         if sample.label not in self.retriever.label2sample:
-            self.retriever.label2sample[sample.pseudo_label] = [sample]
+            self.retriever.label2sample[sample.label] = [sample]
         else:
-            self.retriever.label2sample[sample.pseudo_label].append(sample)
+            self.retriever.label2sample[sample.label].append(sample)
 
     def run(self):
         results = {"online": 0,"last":0}

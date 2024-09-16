@@ -150,10 +150,10 @@ class DynamicReteiever:
             if label not in self.label2sample:
                 self.demonstrations.append(sample)
                 self.label2sample[label] = [sample]
-                for key,samples_list in self.label2sample.items():
-                    if len(samples_list) > 5:
+                for key,sample_list in self.label2sample.items():
+                    if len(sample_list) > 5:
                         # 删掉离中心点（prototype）最远的
-                        least_similar_index = self.find_least_similar_index(samples_list)
+                        least_similar_index = self.find_least_similar_index(sample_list)
                         removed_sample = sample_list[least_similar_index]
                         self.label2sample[key].remove(removed_sample)
                         self.demonstrations.remove(removed_sample)
@@ -161,10 +161,10 @@ class DynamicReteiever:
             elif len(self.label2sample[label]) < 5:
                 self.demonstrations.append(sample)
                 self.label2sample[label].append(sample)
-                for key,samples_list in self.label2sample.items():
-                    if len(samples_list) > 5:
+                for key,sample_list in self.label2sample.items():
+                    if len(sample_list) > 5:
                         # 删掉离中心点（prototype）最远的
-                        least_similar_index = self.find_least_similar_index(samples_list)
+                        least_similar_index = self.find_least_similar_index(sample_list)
                         removed_sample = sample_list[least_similar_index]
                         self.label2sample[key].remove(removed_sample)
                         self.demonstrations.remove(removed_sample)

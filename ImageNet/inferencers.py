@@ -411,6 +411,19 @@ class FewShot:
             # 取前100类对应的图片,每类取self.args.M//100张,也就是supporting set的大小是self.args.M
             for i in self.all_class_names:
                 support_set.extend(train_dataset.get_data_list_by_class(class_name=i)[0:self.args.M//100])
+        elif self.args.dataset_mode == "unbalanced_manually":
+            difficult_class = ['alligator lizard','eastern hog-nosed snake','tailed frog','kingsnake','Saharan horned viper','terrapin']
+            easy_class = ['great grey owl','bald eagle','goldfish','box turtle','hen','toucan']
+            for i in range(len(self.all_class_names)):
+                class_name = self.all_class_names[i]
+                class_samples = train_dataset.get_data_list_by_class(class_name=class_name)
+                if class_name in difficult_class:
+                    support_set.extend(class_samples[:8])
+                elif class_name in easy_class:
+                    support_set.extend(class_samples[:2])
+                else:
+                    support_set.extend(class_samples[:5])
+
         else: # unbalanced
             cycle_length = 10  # 每10类循环一次
             cycle_pattern = [0, 1, 2, 3, 4, 6, 7, 8, 9, 10]  # 总数为50张的分布

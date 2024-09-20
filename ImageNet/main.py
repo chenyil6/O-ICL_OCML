@@ -21,13 +21,13 @@ def get_args():
     )       
 
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
-    parser.add_argument("--dataset_mode", type=str, default="unbalanced") # balanced;unbalanced;unbalanced_manually
+    parser.add_argument("--dataset_mode", type=str, default="balanced") # balanced;unbalanced;unbalanced_manually
     parser.add_argument("--result_folder", type=str, default="./result")
     parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="topk")
-    parser.add_argument("--update_strategy", type=str, default="balance_prototype") # noUpdate;balance_random;prototype;balance_prototype
+    parser.add_argument("--update_strategy", type=str, default="distance") # noUpdate;balance_random;prototype;balance_prototype;global_diversity;balance_prototype_new;entropy;distance
     parser.add_argument("--M", type=int, default=500)
     arguments = parser.parse_args()
     return arguments

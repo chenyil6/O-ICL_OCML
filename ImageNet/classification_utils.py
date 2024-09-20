@@ -1002,7 +1002,6 @@ IMAGENET_CLASSNAMES = [
     "toilet paper",
 ]
 
-
 IMAGENET_1K_CLASS_ID_TO_LABEL = dict(
     zip(range(len(IMAGENET_CLASSNAMES)), IMAGENET_CLASSNAMES)
 )

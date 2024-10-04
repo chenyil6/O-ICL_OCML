@@ -21,14 +21,16 @@ def get_args():
     )       
 
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
-    parser.add_argument("--dataset_mode", type=str, default="balanced") # balanced;unbalanced;unbalanced_manually
+    parser.add_argument("--dataset_mode", type=str, default="imbalanced") # balanced;imbalanced;
     parser.add_argument("--result_folder", type=str, default="./result")
-    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL
+    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL;Online_ICL_New
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for DAIL
-    parser.add_argument("--select_strategy", type=str, default="topk")
-    parser.add_argument("--update_strategy", type=str, default="distance") # noUpdate;balance_random;prototype;balance_prototype;global_diversity;balance_prototype_new;entropy;distance
-    parser.add_argument("--M", type=int, default=500)
+    parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
+    parser.add_argument("--update_strategy", type=str, default="SV") # noUpdate;prototype;CBRS;SV;value
+    parser.add_argument("--M", type=int, default=1000)
+    parser.add_argument("--alpha", type=float, default=0.5)
+    parser.add_argument("--prob", type=float, default=0)
     arguments = parser.parse_args()
     return arguments
 
@@ -88,32 +90,58 @@ if __name__ == "__main__":
             raise ValueError(f"Unsupported model type: {args.model}")
         
         results, predictions = inferencer.run()
+    elif args.method == "Online_ICL_New":
+        if args.model == "open_flamingo":
+            inferencer = Online_ICL_New(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
+        elif args.model == "idefics":
+            inferencer = Online_ICL_New(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
+        else:
+            raise ValueError(f"Unsupported model type: {args.model}")
+        
+        results, predictions = inferencer.run()
+    elif args.method == "Online_ICL_Count":
+        if args.model == "open_flamingo":
+            inferencer = Online_ICL_Count(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
+        elif args.model == "idefics":
+            inferencer = Online_ICL_Count(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
+        else:
+            raise ValueError(f"Unsupported model type: {args.model}")
+        
+        results, predictions = inferencer.run()
     else:
         print("Method is invalid.")
         results = None
 
-    if args.method == "Online_ICL":
-        res_file_online = os.path.join(args.result_folder, f"online-{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
-                                                f"-update_strategy={args.update_strategy}-.json")
-        
+    if args.method == "Online_ICL": # 比较朴素的更新，没有引入概率机制
         res_file_last = os.path.join(args.result_folder, f"last-{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
-                                                f"-update_strategy={args.update_strategy}-.json")
+                                                f"-update_strategy={args.update_strategy}-alpha={args.alpha}.json")
+
+        
+        with open(res_file_last, 'w') as json_file:
+            json.dump(predictions, json_file, indent=4)
+    elif args.method == "Online_ICL_New": #引入了概率机制的
+        res_file = os.path.join(args.result_folder, f"last-{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
+                                                f"-update_strategy={args.update_strategy}-prob={args.prob}.json")
 
         # load the prediction results to a json file
-        with open(res_file_online, 'w') as json_file:
-            json.dump(predictions["0"], json_file, indent=4)
-        
-        with open(res_file_online, 'w') as json_file:
-            json.dump(predictions["1"], json_file, indent=4)
+        with open(res_file, 'w') as json_file:
+            json.dump(predictions, json_file, indent=4)
+    elif args.method == "Online_ICL_Count": #
+        res_file = os.path.join(args.result_folder, f"last-{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
+                                                f"-update_strategy={args.update_strategy}-prob={args.prob}.json")
+
+        # load the prediction results to a json file
+        with open(res_file, 'w') as json_file:
+            json.dump(predictions, json_file, indent=4)
     else: # FewShot
         res_file = os.path.join(args.result_folder, f"last-{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
-                                                f"-update_strategy={args.update_strategy}-.json")
+                                                f"-update_strategy={args.update_strategy}.json")
 
         # load the prediction results to a json file
         with open(res_file, 'w') as json_file:
             json.dump(predictions, json_file, indent=4)
 
-    results = {"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
-               "update_strategy": args.update_strategy,"results": results}
+    results = {"device":args.device,"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
+               "update_strategy":args.update_strategy,"prob": args.prob,"alpha":args.alpha,"results": results}
     print("-------------------------final-results-----------------------")
     print(results)

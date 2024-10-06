@@ -169,7 +169,7 @@ class DynamicReteiever:
     def update_based_on_value_dynamic(self,sample_to_remove,alpha):
         # 计算 sample_to_remove 的 value 值
         all_embeds = [s.embed for s in self.demonstrations]
-        query_embed = sample_to_remove.embed.unsqueeze(0)  
+        query_embed = sample_to_remove.embed 
         
         similarities = torch.cosine_similarity(query_embed, torch.stack(all_embeds))
         _, top_indices = torch.topk(similarities, k=10)  
@@ -185,7 +185,7 @@ class DynamicReteiever:
         embed_list = [sample.embed for sample in sample_list]
         prototype = torch.mean(torch.stack(embed_list), dim=0)
         proto_similarity = torch.cosine_similarity(query_embed.unsqueeze(0), prototype.unsqueeze(0)).item()
-        sample_to_remove.value = alpha * label_consistency + (1 - alpha) * proto_similarity.item()
+        sample_to_remove.value = alpha * label_consistency + (1 - alpha) * proto_similarity
 
         # 看是否要替换
         min_value_sample = min(sample_list, key=lambda s: s.value)
@@ -267,8 +267,8 @@ class DynamicReteiever:
                 sample.value = x1-x2 
 
         elif self.args.update_strategy == "value_dynamic":
-            all_embeds = [s.embed for s in self.retriever.demonstrations]
-            for sample in self.retriever.demonstrations:
+            all_embeds = [s.embed for s in self.demonstrations]
+            for sample in self.demonstrations:
                 query_embed = sample.embed  
                 similarities = torch.cosine_similarity(query_embed.unsqueeze(0), torch.stack(all_embeds))
                 _, top_indices = torch.topk(similarities, k=11)  # 获取前11个相似样本的索引

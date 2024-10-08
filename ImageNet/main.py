@@ -27,10 +27,8 @@ def get_args():
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
-    parser.add_argument("--update_strategy", type=str, default="value_dynamic") # noUpdate;prototype;CBRS;SV;value
+    parser.add_argument("--update_strategy", type=str, default="default") # noUpdate;prototype;CBRS;SV;value
     parser.add_argument("--M", type=int, default=1000)
-    parser.add_argument("--alpha", type=float, default=0.5)
-    parser.add_argument("--prob", type=float, default=0)
     arguments = parser.parse_args()
     return arguments
 
@@ -99,15 +97,6 @@ if __name__ == "__main__":
             raise ValueError(f"Unsupported model type: {args.model}")
         
         results, predictions = inferencer.run()
-    elif args.method == "Online_ICL_Count":
-        if args.model == "open_flamingo":
-            inferencer = Online_ICL_Count(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
-        elif args.model == "idefics":
-            inferencer = Online_ICL_Count(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
-        else:
-            raise ValueError(f"Unsupported model type: {args.model}")
-        
-        results, predictions = inferencer.run()
     else:
         print("Method is invalid.")
         results = None
@@ -126,13 +115,6 @@ if __name__ == "__main__":
         # load the prediction results to a json file
         with open(res_file, 'w') as json_file:
             json.dump(predictions, json_file, indent=4)
-    elif args.method == "Online_ICL_Count": #
-        res_file = os.path.join(args.result_folder, f"last-{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
-                                                f"-update_strategy={args.update_strategy}-prob={args.prob}.json")
-
-        # load the prediction results to a json file
-        with open(res_file, 'w') as json_file:
-            json.dump(predictions, json_file, indent=4)
     else: # FewShot
         res_file = os.path.join(args.result_folder, f"last-{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
                                                 f"-update_strategy={args.update_strategy}.json")
@@ -142,6 +124,6 @@ if __name__ == "__main__":
             json.dump(predictions, json_file, indent=4)
 
     results = {"device":args.device,"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
-               "update_strategy":args.update_strategy,"prob": args.prob,"alpha":args.alpha,"results": results}
+               "update_strategy":args.update_strategy,"results": results}
     print("-------------------------final-results-----------------------")
     print(results)

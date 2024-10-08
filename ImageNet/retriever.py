@@ -969,71 +969,35 @@ class DynamicReteiever:
         self.demonstrations.append(new_sample)
         self.label2sample[label].append(new_sample)
     
-    def update_count(self,class_acc):
-        if len(self.pool) == 0:
-            return
-        samples_to_remove = self.pool[:1]
-        self.pool = self.pool[1:]
-        if self.args.dataset_mode == "balanced":
-            if self.args.update_strategy == "accuracy":
-                self.update_based_on_accuracy(samples_to_remove[0],class_acc)
-            else:
-                print("update_strategy is not effective.")
-                return
-        else: # imbalanced
-            if self.args.update_strategy == "CBRS":
-                self.update_based_on_CBRS(samples_to_remove[0])
-            else:
-                print("update_strategy is not effective.")
-                return
-        
-    
-    def update_based_on_accuracy(self,sample,class_acc):
-        label = sample.label
-        accuracy = class_acc[label]
-        query_embed = sample.embed
+    def update_online(self,query_sample):
+        query_embed = query_sample.embed
+        label = query_sample.label
+
         sample_list = self.label2sample[label]
         embed_list = [sample.embed for sample in sample_list]
+
         prototype = torch.mean(torch.stack(embed_list), dim=0)
+
         query_similarity = torch.cosine_similarity(query_embed.unsqueeze(0), prototype.unsqueeze(0)).item()
+
         similarities = torch.cosine_similarity(torch.stack(embed_list), prototype.unsqueeze(0))
+
         least_similar_index = torch.argmin(similarities).item()
-        sample_to_remove = sample_list[least_similar_index] # sample list中离prototype最远的样本
-        if accuracy >= 0.8: # 高正确率区间：移除与类原型距离较远的样本，但至少保留min_samples个样本
-            if len(sample_list) > 4:
-                self.demonstrations.remove(sample_to_remove)
-                self.label2sample[sample.label].remove(sample_to_remove)
-            else: # 不移除 数量不变，看是否要替换
-                if query_similarity > similarities[least_similar_index]:
-                    self.demonstrations.remove(sample_to_remove)
-                    self.demonstrations.append(sample_to_remove)
-                    self.label2sample[label].remove(sample_to_remove)
-                    self.label2sample[label].append(sample_to_remove)
-        elif 0.5 <= accuracy < 0.8: # 中等正确率区间：替换样本
-            if query_similarity > similarities[least_similar_index]:
-                sample_to_remove = sample_list[least_similar_index]
-                self.demonstrations.remove(sample_to_remove)
-                self.demonstrations.append(sample_to_remove)
-                self.label2sample[label].remove(sample_to_remove)
-                self.label2sample[label].append(sample_to_remove)
-        else: # 低正确率区间：增加样本
-            if len(sample_list) < 20: # 如果shot小于 20 ，一定增加样本
-                self.demonstrations.append(sample)
-                self.label2sample[label].append(sample)
-            else:
-                if query_similarity > similarities[least_similar_index]:
-                    sample_to_remove = sample_list[least_similar_index]
-                    self.demonstrations.remove(sample_to_remove)
-                    self.demonstrations.append(sample_to_remove)
-                    self.label2sample[label].remove(sample_to_remove)
-                    self.label2sample[label].append(sample_to_remove)
+
+        # 如果推理结果正确，增加相似度
+        if query_sample.pseudo_label == label:
+            query_similarity += query_sample.pred_score
+        # 如果推理结果错误，也增加相似度，但可能使用一个不同的权重
+        else:
+            query_similarity += query_sample.pred_score * 0.5
+
+        # 判断是否需要替换
+        if query_similarity > similarities[least_similar_index]:
+            self.demonstrations.remove(sample_list[least_similar_index])
+            self.demonstrations.append(query_sample)
+            self.label2sample[label].remove(sample_list[least_similar_index])
+            self.label2sample[label].append(query_sample)
+
+        assert len(self.demonstrations) == self.args.M
         
-        while(len(self.demonstrations)>self.args.M):
-            high_acc_labels = sorted(self.probs, key=lambda x: self.probs[x],reverse=True)
-            for l in high_acc_labels:
-                if len(self.label2sample[l]) < 4:
-                    continue
-                s,d = self.get_least_similar_sample(self.label2sample[l])
-                self.demonstrations.remove(s)
-                self.label2sample[l].remove(s)
-                break
+

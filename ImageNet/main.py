@@ -1,7 +1,7 @@
 import argparse
 from inferencers import *
 import logging
-from transformers import CLIPProcessor, CLIPModel
+from transformers import AutoTokenizer, CLIPModel,AutoProcessor
 import sys
 sys.path.append('/data/chy/online')
 from open_flamingo_4.open_flamingo.src.factory import create_model_and_transforms
@@ -12,7 +12,7 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="1")
+    parser.add_argument("--device", type=str, default="3")
     parser.add_argument(
         "--model",
         type=str,
@@ -23,11 +23,11 @@ def get_args():
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
     parser.add_argument("--dataset_mode", type=str, default="balanced") # balanced;imbalanced;
     parser.add_argument("--result_folder", type=str, default="./result")
-    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL;Online_ICL_New
+    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL;Online_ICL_Old
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
-    parser.add_argument("--update_strategy", type=str, default="margin") # noUpdate;prototype;CBRS;SV;value
+    parser.add_argument("--update_strategy", type=str, default="default") # noUpdate;prototype;CBRS;SV;value
     parser.add_argument("--M", type=int, default=1000)
     arguments = parser.parse_args()
     return arguments
@@ -65,11 +65,22 @@ if __name__ == "__main__":
 
     # embedding model
     embedding_model = CLIPModel.from_pretrained('/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
-    embedding_processor = CLIPProcessor.from_pretrained(
+    embedding_processor = AutoProcessor.from_pretrained(
+            '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
+    embedding_tokenizer = AutoTokenizer.from_pretrained(
             '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
     print("load clip successfully...")
 
-    if args.method == "Online_ICL":
+    if args.method == "Online_ICL_Old":
+        if args.model == "open_flamingo":
+            inferencer = Online_ICL_Old(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device)
+        elif args.model == "idefics":
+            inferencer = Online_ICL_Old(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
+        else:
+            raise ValueError(f"Unsupported model type: {args.model}")
+
+        results, predictions = inferencer.run()
+    elif args.method == "Online_ICL":
         if args.model == "open_flamingo":
             inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
         elif args.model == "idefics":
@@ -78,7 +89,6 @@ if __name__ == "__main__":
             raise ValueError(f"Unsupported model type: {args.model}")
 
         results, predictions = inferencer.run()
-
     elif args.method == "FewShot":
         if args.model == "open_flamingo":
             inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
@@ -88,35 +98,26 @@ if __name__ == "__main__":
             raise ValueError(f"Unsupported model type: {args.model}")
         
         results, predictions = inferencer.run()
-    elif args.method == "Online_ICL_New":
-        if args.model == "open_flamingo":
-            inferencer = Online_ICL_New(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
-        elif args.model == "idefics":
-            inferencer = Online_ICL_New(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
-        else:
-            raise ValueError(f"Unsupported model type: {args.model}")
-        
-        results, predictions = inferencer.run()
     else:
         print("Method is invalid.")
         results = None
 
-    if args.method == "Online_ICL": # 比较朴素的更新，没有引入概率机制
-        res_file_last = os.path.join(args.result_folder, f"last-{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
+    if args.method == "Online_ICL_Old": 
+        res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
                                                 f"-update_strategy={args.update_strategy}.json")
 
         
         with open(res_file_last, 'w') as json_file:
             json.dump(predictions, json_file, indent=4)
-    elif args.method == "Online_ICL_New": #引入了概率机制的
-        res_file = os.path.join(args.result_folder, f"last-{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
-                                                f"-update_strategy={args.update_strategy}-prob={args.prob}.json")
+    elif args.method == "Online_ICL": 
+        res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
+                                                f"-update_strategy={args.update_strategy}.json")
 
-        # load the prediction results to a json file
-        with open(res_file, 'w') as json_file:
+        
+        with open(res_file_last, 'w') as json_file:
             json.dump(predictions, json_file, indent=4)
     else: # FewShot
-        res_file = os.path.join(args.result_folder, f"last-{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
+        res_file = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
                                                 f"-update_strategy={args.update_strategy}.json")
 
         # load the prediction results to a json file

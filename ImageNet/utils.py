@@ -34,7 +34,7 @@ def get_topk_classifications(outputs,classnames_tokens,topk):
         k=topk,
         class_id_to_name=IMAGENET_1K_CLASS_ID_TO_LABEL,
     )
-    return predicted_classnames,predicted_logprobs
+    return predicted_classnames,predicted_logprobs,overall_log_probs
 
 
 def get_predicted_classname(logprobs, k, class_id_to_name):

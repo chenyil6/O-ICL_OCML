@@ -23,7 +23,6 @@ class Sample:
     class_id:int
     pseudo_label: str or None
     pred_score: float or None
-    value: int
 
 
 class Online_ICL:
@@ -174,6 +173,15 @@ class Online_ICL:
         else:
             self.retriever.label2sample[sample.label].append(sample)
 
+    def _initialize_prototypes(self,):
+        for label, samples in self.retriever.label2sample.items():
+            if samples:
+                embeddings = torch.stack([s.embed for s in samples])
+                prototype = torch.mean(embeddings, dim=0)
+                self.retriever.label_to_prototype[label] = prototype
+            else:
+                self.retriever.label_to_prototype[label] = torch.zeros_like(next(iter(self.label_to_prototype.values())))
+
     def visualize_tsne(self,title, save_path,perplexity=30, learning_rate=200):
         """
         对 memory bank 中的样本进行 t-SNE 可视化并保存为 JPG 文件
@@ -261,8 +269,10 @@ class Online_ICL:
             # 对 prototype 映射表 更新
             self.process_dict(support_sample)
 
+        self._initialize_prototypes()
+
         # 预处理好了 self.retriever.demonstrations ，可以对其中的一些样本进行可视化了
-        #self.visualize_tsne("Initial Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-initial_memory_bank.jpg")
+        self.visualize_tsne("Initial Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-initial_memory_bank.jpg")
         
         print(f"Get the value of every sample in support set")
         sample_pool_rng.shuffle(sample_pool)  # 使用单独的 random 对象打乱 sample_pool
@@ -286,7 +296,7 @@ class Online_ICL:
             self.inference(sample_pool[idx])
 
         print(f"Successfully update the support set with sample pool, now support set size: {len(self.retriever.demonstrations)}, Sample pool size: {len(self.retriever.pool)}")
-        #self.visualize_tsne("Updated Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-updated_memory_bank.jpg")
+        self.visualize_tsne("Updated Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-updated_memory_bank.jpg")
         print("Inference using the latest supporting set...")
         
         self.test_sample_num = 0

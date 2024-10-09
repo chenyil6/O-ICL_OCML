@@ -13,13 +13,7 @@ class DynamicReteiever:
         self.pool = []
         self.label2sample = dict()
         self.dnum = 4
-        self.probs = dict()
-        self.drop_prob = dict()
-        self.accept_prob = dict()
-        self.full_classes = set()
-        self.all_meet = dict()
-        self.max_samples_num = 10
-        self.k = 10
+        self.label_to_prototype = {}
     
     def get_final_query(self, sample):
         demonstrations = self.get_demonstrations_from_bank(sample)
@@ -970,6 +964,15 @@ class DynamicReteiever:
         self.label2sample[label].append(new_sample)
     
     def update_online(self,query_sample):
+        if self.args.update_strategy == "default":
+            self.update_based_on_inference(query_sample)
+        elif self.args.update_strategy == "margin":
+            self.update_based_on_max_margin(query_sample)
+        else:
+            print("update_strategy is not effective.")
+            return
+        
+    def update_based_on_inference(self,query_sample):
         query_embed = query_sample.embed
         label = query_sample.label
 
@@ -986,10 +989,10 @@ class DynamicReteiever:
 
         # 如果推理结果正确，增加相似度
         if query_sample.pseudo_label == label:
-            query_similarity += query_sample.pred_score
+            query_similarity += query_sample.pred_score[0]
         # 如果推理结果错误，也增加相似度，但可能使用一个不同的权重
         else:
-            query_similarity += query_sample.pred_score * 0.5
+            query_similarity += query_sample.pred_score[0] * 0.5
 
         # 判断是否需要替换
         if query_similarity > similarities[least_similar_index]:
@@ -1000,4 +1003,70 @@ class DynamicReteiever:
 
         assert len(self.demonstrations) == self.args.M
         
+    def update_based_on_max_margin(self, query_sample):
+        query_embed = query_sample.embed
+        label = query_sample.label
 
+        current_prototype = self.label_to_prototype[label]
+
+        query_similarity = torch.cosine_similarity(query_embed.unsqueeze(0), current_prototype.unsqueeze(0)).item()
+
+        # 计算新样本与其他类别的原型的相似度
+        other_similarities = [
+            torch.cosine_similarity(query_embed.unsqueeze(0), proto.unsqueeze(0)).item()
+            for lbl, proto in self.label_to_prototype.items() if lbl != label
+        ]
+        min_other_similarity = min(other_similarities) if other_similarities else 0
+
+        # 如果推理结果正确，增加相似度
+        if query_sample.pseudo_label == label:
+            query_similarity += query_sample.pred_score[0]
+        # 如果推理结果错误，也增加相似度，但可能使用一个不同的权重
+        else:
+            query_similarity += query_sample.pred_score[0] * 0.5
+
+        # 找到当前类别中与原型最不相似的样本
+        sample_list = self.label2sample[label]
+        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
+        least_similar_index = torch.argmin(similarities).item()
+
+        # 判断是否需要替换
+        if query_similarity - min_other_similarity > similarities[least_similar_index]:
+            # 移除最不相似的样本
+            old_sample = sample_list[least_similar_index]
+            self.label2sample[label].remove(old_sample)
+            self.demonstrations.remove(old_sample)
+
+            # 添加新样本
+            self.demonstrations.append(query_sample)
+            sample_list.append(query_sample)
+
+            # 更新原型
+            new_embeddings = torch.stack([s.embed for s in sample_list])
+            self.label_to_prototype[label] = torch.mean(new_embeddings, dim=0)
+
+        assert len(self.demonstrations) == self.args.M
+
+    def add_sample_to_support_set(self, sample):
+        label = sample.label
+        self.demonstrations.append(sample)
+        self.label2sample[label].append(sample)
+    
+        # 增加样本后更新原型（增量计算）
+        current_prototype = self.label_to_prototype.get(label, torch.zeros_like(sample.embed))
+        new_prototype = (current_prototype * (len(self.label2sample[label]) - 1) + sample.embed) / len(self.label2sample[label])
+        self.label_to_prototype[label] = new_prototype
+
+    def remove_sample_from_support_set(self, sample):
+        label = sample.label
+        self.demonstrations.remove(sample)
+        self.label2sample[label].remove(sample)
+    
+        if self.label2sample[label]:
+            # 重新计算原型
+            new_embeddings = torch.stack([s.embed for s in self.label2sample[label]])
+            new_prototype = torch.mean(new_embeddings, dim=0)
+            self.label_to_prototype[label] = new_prototype
+        else:
+            # 处理没有样本的类别（可选）
+            self.label_to_prototype[label] = torch.zeros_like(next(iter(self.label_to_prototype.values())))

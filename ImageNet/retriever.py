@@ -50,16 +50,6 @@ class DynamicReteiever:
         values, indices = torch.topk(scores, self.dnum, largest=True)
         indices = indices.tolist()
         return indices
-
-    def get_topk_l2(self, sample):
-        # 获取所有 demonstration 的 embed
-        demonstration_embeds = torch.stack([sample.embed for sample in self.demonstrations], dim=0)
-        # 计算每个 demonstration 和当前 sample 的 L2 distance
-        distances = torch.norm(demonstration_embeds - sample.embed.unsqueeze(0), p=2, dim=1)
-        # 取最小的 k 个距离对应的索引
-        values, indices = torch.topk(distances, self.dnum, largest=False)
-        indices = indices.tolist()
-        return indices
     
     def update(self):
         if len(self.pool) == 0:
@@ -69,14 +59,12 @@ class DynamicReteiever:
         if self.args.dataset_mode == "balanced":
             if self.args.update_strategy == "prototype":
                 self.update_based_on_prototype(samples_to_remove[0])
-            elif self.args.update_strategy == "SV":
-                self.update_based_on_SV(samples_to_remove[0])
-            elif self.args.update_strategy == "value":
-                self.update_based_on_value(samples_to_remove[0],self.args.alpha)
             elif self.args.update_strategy == "clip":
                 self.update_based_on_embed(samples_to_remove[0])
+            elif self.args.update_strategy == "combined":
+                self.update_based_on_combined(samples_to_remove[0])
             else:
-                print("update_strategy is not effective.")
+                print(f"{self.args.update_strategy} is not effective.")
                 return
         else: # imbalanced
             if self.args.update_strategy == "prototype":
@@ -128,55 +116,45 @@ class DynamicReteiever:
             self.label2sample[label].append(sample_to_remove)
             
         assert len(self.demonstrations) == self.args.M
-    # 结合 value和prototype
-    def update_based_on_value(self,sample_to_remove,alpha):
-        # 计算 sample_to_remove 的 value 值
-        all_embeds = [s.embed for s in self.demonstrations]
-        query_embed = sample_to_remove.embed  
-        
-        similarities = torch.cosine_similarity(query_embed.unsqueeze(0), torch.stack(all_embeds))
-        _, top_indices = torch.topk(similarities, k=10)  
-
-        x1 = sum(1 for i in top_indices if self.demonstrations[i].label == sample_to_remove.label)
-        x2 = sum(1 for i in top_indices if self.demonstrations[i].label != sample_to_remove.label)
-
-        label_consistency = (x1 - x2) / 10.0 
-        
-        # 计算对应类的prototype
+    
+    def update_based_on_combined(self,sample_to_remove,alpha=0.5):
+        """
+        结合 Prototype 相似度和 Clip 相似度进行样本更新 alpha 控制两者权重。
+        """
+        query_embed = sample_to_remove.embed
+        query_similarity_clip = sample_to_remove.similarity  
         label = sample_to_remove.label
+
+        # 获取当前类别的样本列表和嵌入向量
         sample_list = self.label2sample[label]
         embed_list = [sample.embed for sample in sample_list]
         prototype = torch.mean(torch.stack(embed_list), dim=0)
-        proto_similarity = torch.cosine_similarity(query_embed.unsqueeze(0), prototype.unsqueeze(0)).item()
-        sample_to_remove.value = alpha * label_consistency + (1 - alpha) * proto_similarity
-
-        # 看是否要替换
-        min_value_sample = min(sample_list, key=lambda s: s.value)
-        if sample_to_remove.value > min_value_sample.value:
-            self.replace_sample(min_value_sample,sample_to_remove,label)
-
-        assert len(self.demonstrations) == self.args.M
-    
-    def update_based_on_SV(self,sample_to_remove):
-        # 计算 sample_to_remove 的 value 值
-        all_embeds = [s.embed for s in self.demonstrations]
-        query_embed = sample_to_remove.embed
+        query_similarity_prototype = torch.cosine_similarity(query_embed.unsqueeze(0), prototype.unsqueeze(0)).item()
+        combined_query_similarity = alpha * query_similarity_prototype + (1 - alpha) * query_similarity_clip
+        similarities_prototype = torch.cosine_similarity(torch.stack(embed_list), prototype.unsqueeze(0))
         
-        similarities = torch.cosine_similarity(query_embed.unsqueeze(0), torch.stack(all_embeds))
-        _, top_indices = torch.topk(similarities, k=10)  
+        # 对于每个类内样本，计算综合相似度
+        combined_similarities = []
+        for i, sample in enumerate(sample_list):
+            # 每个样本的 Clip 相似度
+            similarity_clip = sample.similarity
+            # 每个样本的 Prototype 相似度
+            similarity_prototype = similarities_prototype[i].item()
+            # 计算综合相似度
+            combined_similarity = alpha * similarity_prototype + (1 - alpha) * similarity_clip
+            combined_similarities.append(combined_similarity)
 
-        x1 = sum(1 for i in top_indices if self.demonstrations[i].label == sample_to_remove.label)
-        x2 = sum(1 for i in top_indices if self.demonstrations[i].label != sample_to_remove.label)
+        # 找到类内综合相似度最低的样本
+        combined_similarities = torch.tensor(combined_similarities)
+        least_similar_index = torch.argmin(combined_similarities).item()
 
-        sample_to_remove.value = x1-x2
+        # 判断是否需要替换
+        if combined_query_similarity > combined_similarities[least_similar_index]:
+            self.demonstrations.remove(sample_list[least_similar_index])
+            self.demonstrations.append(sample_to_remove)
+            self.label2sample[label].remove(sample_list[least_similar_index])
+            self.label2sample[label].append(sample_to_remove)
         
-        label = sample_to_remove.label
-    
-        sample_list = self.label2sample[label]
-        min_value_sample = min(sample_list, key=lambda s: s.value)
-        if sample_to_remove.value > min_value_sample.value:
-            self.replace_sample(min_value_sample,sample_to_remove,label)
-
         assert len(self.demonstrations) == self.args.M
 
     def update_based_on_balance_prototype(self, sample,max_samples_num):
@@ -357,10 +335,10 @@ class DynamicReteiever:
 
         # 如果推理结果正确，增加相似度
         if query_sample.pseudo_label == label:
-            query_similarity += query_sample.gt_score[0]
+            query_similarity += query_sample.gt_score
         # 如果推理结果错误，也增加相似度，但可能使用一个不同的权重
         else:
-            query_similarity += query_sample.gt_score[0] * 0.5
+            query_similarity += query_sample.gt_score * 0.5
 
         # 找到当前类别中与原型最不相似的样本
         sample_list = self.label2sample[label]

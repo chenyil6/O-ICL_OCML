@@ -12,7 +12,7 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="3")
+    parser.add_argument("--device", type=str, default="0")
     parser.add_argument(
         "--model",
         type=str,
@@ -23,11 +23,11 @@ def get_args():
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
     parser.add_argument("--dataset_mode", type=str, default="balanced") # balanced;imbalanced;
     parser.add_argument("--result_folder", type=str, default="./result")
-    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL;Online_ICL_Old
+    parser.add_argument("--method", type=str, default="Online_ICL_Old")# FewShot;Online_ICL;Online_ICL_Old
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
-    parser.add_argument("--update_strategy", type=str, default="default") # noUpdate;prototype;CBRS;SV;value
+    parser.add_argument("--update_strategy", type=str, default="clip") # noUpdate;prototype;CBRS;SV;value
     parser.add_argument("--M", type=int, default=1000)
     arguments = parser.parse_args()
     return arguments
@@ -102,6 +102,11 @@ if __name__ == "__main__":
         print("Method is invalid.")
         results = None
 
+    results = {"device":args.device,"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
+               "update_strategy":args.update_strategy,"results": results}
+    print("-------------------------final-results-----------------------")
+    print(results)
+    
     if args.method == "Online_ICL_Old": 
         res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
                                                 f"-update_strategy={args.update_strategy}.json")
@@ -124,7 +129,4 @@ if __name__ == "__main__":
         with open(res_file, 'w') as json_file:
             json.dump(predictions, json_file, indent=4)
 
-    results = {"device":args.device,"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
-               "update_strategy":args.update_strategy,"results": results}
-    print("-------------------------final-results-----------------------")
-    print(results)
+    

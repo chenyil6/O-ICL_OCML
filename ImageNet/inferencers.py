@@ -20,7 +20,7 @@ class Sample:
     image: Image
     label:str
     embed: torch.TensorType
-    similarity:float
+    similarity:Optional[float]
     class_id:int
     pseudo_label: Optional[str]
     pred_score: Optional[float]
@@ -103,7 +103,7 @@ class Online_ICL_Old:
         gt_label_index = self.all_class_names.index(y_i)
 
         # Get the confidence score of the ground truth label
-        gt_label_confidence = overall_log_probs[gt_label_index]
+        gt_label_confidence = overall_log_probs[gt_label_index].item()
         self.predictions.append(
             {
                 "id": sample.idx,
@@ -116,7 +116,7 @@ class Online_ICL_Old:
                 "prompt_label":[dm.class_id for dm in demonstrations]
             }
         )
-        sample.pred_score = predicted_logprobs
+        sample.pred_score = predicted_logprobs[0]
         sample.pseudo_label = predicted_classnames[0]
         sample.gt_score = gt_label_confidence 
 
@@ -171,7 +171,6 @@ class Online_ICL_Old:
             self.get_response_idefics(sample)
         if sample.pseudo_label == sample.label:
             self.right_sample_num += 1
-        self.retriever.update_online(sample)
 
     def preprocess(self, sample):
         idx = sample["id"]
@@ -246,9 +245,13 @@ class Online_ICL_Old:
         sample_pool_rng = random.Random(self.args.seed + 1)  # 用于打乱 sample_pool 的随机生成器
         class_selection_rng = random.Random(self.args.seed + 3)  # 用于选择 no_sample_classes 的随机生成器
     
-        # 从train_dataset中取support set
+        # 从train_dataset中取support set大小为5，取sample pool 大小10个
+
         support_set = []
         sample_pool = []
+
+        
+
         print("get memory bank and sample pool ...")
         if self.args.dataset_mode == "balanced":
             for i in range(len(self.all_class_names)):
@@ -306,7 +309,7 @@ class Online_ICL_Old:
         
         self.test_sample_num = 0
         self.right_sample_num = 0
-        for idx in tqdm(range(len(validate_dataset)), desc=f"Inference Support Set..."):
+        for idx in tqdm(range(len(validate_dataset)//1000), desc=f"Inference Support Set..."):
             self.inference(validate_dataset[idx])
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc
@@ -453,7 +456,7 @@ class Online_ICL:
         label = sample["class_name"]
         class_id = sample["class_id"]
         embed = self.get_embedding(image).squeeze().cpu()
-        sample = Sample(idx, image, label, embed,class_id, None,None,0)
+        sample = Sample(idx, image, label, embed,None,class_id, None,None,None)
         return sample
     
     def process_dict(self,sample):

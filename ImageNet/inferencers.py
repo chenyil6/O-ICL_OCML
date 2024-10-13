@@ -334,13 +334,14 @@ class Online_ICL:
     2). inference:        inferencer.run()
     """
 
-    def __init__(self, args, tokenizer, model, image_processor,embedding_model, embedding_processor, device,processor=None):
+    def __init__(self, args, tokenizer, model, image_processor,embedding_model, embedding_processor, embedding_tokenizer,device,processor=None):
         self.args = args
         self.tokenizer = tokenizer
         self.model = model
         self.image_processor = image_processor
         self.embedding_model = embedding_model
         self.embedding_processor= embedding_processor
+        self.embedding_tokenizer = embedding_tokenizer
         self.device = device
         self.processor = processor
         self.test_sample_num = 0
@@ -362,6 +363,12 @@ class Online_ICL:
         vision_x = vision_x.unsqueeze(1).unsqueeze(0)
         vision_x = vision_x.to(self.device).half()
         return vision_x
+
+    def get_text_embedding(self, label):
+        inputs = self.embedding_tokenizer(text=label, padding=True,return_tensors="pt")
+        with torch.no_grad():
+            text_features = self.embedding_model.get_text_features(**inputs)
+        return text_features
     
     def prepare_text(self,ice_text):
         self.tokenizer.padding_side = "left"  # For generation padding tokens should be on the left
@@ -474,7 +481,9 @@ class Online_ICL:
         label = sample["class_name"]
         class_id = sample["class_id"]
         embed = self.get_embedding(image).squeeze().cpu()
-        sample = Sample(idx, image, label, embed,None,class_id, None,None,None)
+        label_embed = self.get_text_embedding(label).squeeze().cpu()
+        similarity = torch.cosine_similarity(embed.unsqueeze(0), label_embed.unsqueeze(0), dim=1).item()
+        sample = Sample(idx, image, label, embed,similarity,class_id, None,None,None)
         return sample
     
     def process_dict(self,sample):

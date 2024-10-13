@@ -27,7 +27,7 @@ def get_args():
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
-    parser.add_argument("--update_strategy", type=str, default="default") # noUpdate;prototype;default_margin
+    parser.add_argument("--update_strategy", type=str, default="gradient_minmargin") # noUpdate;prototype;default_margin
     parser.add_argument("--M", type=int, default=1000)
     arguments = parser.parse_args()
     return arguments
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         results, predictions = inferencer.run()
     elif args.method == "Online_ICL":
         if args.model == "open_flamingo":
-            inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
+            inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device)
         elif args.model == "idefics":
             inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
         else:

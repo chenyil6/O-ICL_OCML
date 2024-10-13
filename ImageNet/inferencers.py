@@ -13,6 +13,7 @@ import numpy as np
 import random
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+import json
 
 @dataclasses.dataclass
 class Sample:
@@ -189,6 +190,15 @@ class Online_ICL_Old:
         else:
             self.retriever.label2sample[sample.label].append(sample)
 
+    def _initialize_prototypes(self,):
+        for label, samples in self.retriever.label2sample.items():
+            if samples:
+                embeddings = torch.stack([s.embed for s in samples])
+                prototype = torch.mean(embeddings, dim=0)
+                self.retriever.label_to_prototype[label] = prototype
+            else:
+                self.retriever.label_to_prototype[label] = torch.zeros_like(next(iter(self.label_to_prototype.values())))
+
     def visualize_tsne(self,title, save_path,perplexity=30, learning_rate=200):
         """
         对 memory bank 中的样本进行 t-SNE 可视化并保存为 JPG 文件
@@ -250,8 +260,6 @@ class Online_ICL_Old:
         support_set = []
         sample_pool = []
 
-        
-
         print("get memory bank and sample pool ...")
         if self.args.dataset_mode == "balanced":
             for i in range(len(self.all_class_names)):
@@ -278,6 +286,8 @@ class Online_ICL_Old:
             support_sample = self.preprocess(support_set[idx])
             self.retriever.demonstrations.append(support_sample)
             self.process_dict(support_sample)
+
+        self._initialize_prototypes()
 
         # 预处理好了 self.retriever.demonstrations ，可以对其中的一些样本进行可视化了
         self.visualize_tsne("Initial Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-initial_memory_bank.jpg")
@@ -309,7 +319,7 @@ class Online_ICL_Old:
         
         self.test_sample_num = 0
         self.right_sample_num = 0
-        for idx in tqdm(range(len(validate_dataset)//1000), desc=f"Inference Support Set..."):
+        for idx in tqdm(range(len(validate_dataset)), desc=f"Inference Support Set..."):
             self.inference(validate_dataset[idx])
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc
@@ -379,9 +389,15 @@ class Online_ICL:
             self.all_class_names
         )["input_ids"]
 
-        predicted_classnames,predicted_logprobs = get_topk_classifications(outputs,classnames_tokens,self.topk)
+        predicted_classnames,predicted_logprobs,overall_log_probs = get_topk_classifications(outputs,classnames_tokens,self.topk)
         # compute accuracy
         y_i = sample.label
+
+        # Find the index of the ground truth label
+        gt_label_index = self.all_class_names.index(y_i)
+
+        # Get the confidence score of the ground truth label
+        gt_label_confidence = overall_log_probs[gt_label_index].item()
 
         self.predictions.append(
             {
@@ -389,13 +405,15 @@ class Online_ICL:
                 "gt_label": y_i,
                 "pred_label": predicted_classnames[0],
                 "gt_id": sample.class_id,
-                "pred_score": predicted_logprobs,
+                "pred_score": predicted_logprobs[0],
+                "gt_score": gt_label_confidence,  
                 "prompt_text":ice_text,
                 "prompt_label":[dm.class_id for dm in demonstrations]
             }
         )
-        sample.pred_score = predicted_logprobs
+        sample.pred_score = predicted_logprobs[0]
         sample.pseudo_label = predicted_classnames[0]
+        sample.gt_score = gt_label_confidence 
 
     def get_response_idefics(self,sample):
         demonstrations = self.retriever.get_demonstrations_from_bank(sample)
@@ -588,7 +606,11 @@ class Online_ICL:
         print(f"Successfully update the support set with sample pool, now support set size: {len(self.retriever.demonstrations)}")
         self.visualize_tsne("Updated Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-updated_memory_bank.jpg")
         print("Inference using the latest supporting set...")
-        
+
+        file_path = f'./{self.args.update_strategy}-gradientUpdate.json'  # 确保 self.args.update_strategy 有效
+        with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
+            json.dump(self.retriever.support_gradient_list, json_file, indent=4)
+
         self.test_sample_num = 0
         self.right_sample_num = 0
         for idx in tqdm(range(len(validate_dataset)), desc=f"Inference Support Set..."):

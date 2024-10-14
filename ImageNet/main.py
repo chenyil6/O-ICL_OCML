@@ -27,7 +27,7 @@ def get_args():
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
-    parser.add_argument("--update_strategy", type=str, default="gradient_minmargin_topk") # noUpdate;prototype;default_margin;minmargin
+    parser.add_argument("--update_strategy", type=str, default="maxmargin") # noUpdate;prototype;default_margin;minmargin
     parser.add_argument("--M", type=int, default=1000)
     arguments = parser.parse_args()
     return arguments

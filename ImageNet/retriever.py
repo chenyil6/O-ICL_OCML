@@ -121,7 +121,7 @@ class DynamicReteiever:
             
         assert len(self.demonstrations) == self.args.M
     
-    def update_based_on_maxmargin(self, sample_to_remove): # 待评估
+    def update_based_on_maxmargin(self, sample_to_remove): # 55.56
         query_embed = sample_to_remove.embed
         label = sample_to_remove.label
         query_marigin = self.compute_maxMargin(query_embed,label)
@@ -498,7 +498,7 @@ class DynamicReteiever:
             
         assert len(self.demonstrations) == self.args.M
     
-    def update_based_on_gradient_and_minmargin_topk(self,query_sample):  # 待评估
+    def update_based_on_gradient_and_minmargin_topk(self,query_sample):  # 56.64
         query_embed = query_sample.embed
         label = query_sample.label
         inference_result = 1 if query_sample.pseudo_label == label else 0

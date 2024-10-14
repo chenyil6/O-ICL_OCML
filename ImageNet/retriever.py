@@ -62,10 +62,10 @@ class DynamicReteiever:
         if self.args.dataset_mode == "balanced":
             if self.args.update_strategy == "prototype":
                 self.update_based_on_prototype(samples_to_remove[0])
-            elif self.args.update_strategy == "combined":
-                self.update_based_on_combined(samples_to_remove[0])
             elif self.args.update_strategy == "minmargin":
                 self.update_based_on_minmargin(samples_to_remove[0])
+            elif self.args.update_strategy == "maxmargin":
+                self.update_based_on_maxmargin(samples_to_remove[0])
             else:
                 print(f"{self.args.update_strategy} is not effective.")
                 return
@@ -76,7 +76,7 @@ class DynamicReteiever:
                 print("update_strategy is not effective.")
                 return
         
-    def update_based_on_prototype(self,sample_to_remove):
+    def update_based_on_prototype(self,sample_to_remove): # 58.68
         query_embed = sample_to_remove.embed
         label = sample_to_remove.label
 
@@ -100,53 +100,34 @@ class DynamicReteiever:
             
         assert len(self.demonstrations) == self.args.M
     
-    def update_based_on_combined(self,sample_to_remove,alpha=0.7):
-        """
-        结合 Prototype 相似度和 Clip 相似度进行样本更新 alpha 控制两者权重。
-        """
-        query_embed = sample_to_remove.embed
-        query_similarity_clip = sample_to_remove.similarity  
-        label = sample_to_remove.label
-
-        # 获取当前类别的样本列表和嵌入向量
-        sample_list = self.label2sample[label]
-        embed_list = [sample.embed for sample in sample_list]
-        prototype = torch.mean(torch.stack(embed_list), dim=0)
-        query_similarity_prototype = torch.cosine_similarity(query_embed.unsqueeze(0), prototype.unsqueeze(0)).item()
-        combined_query_similarity = alpha * query_similarity_prototype + (1 - alpha) * query_similarity_clip
-        similarities_prototype = torch.cosine_similarity(torch.stack(embed_list), prototype.unsqueeze(0))
-        
-        # 对于每个类内样本，计算综合相似度
-        combined_similarities = []
-        for i, sample in enumerate(sample_list):
-            # 每个样本的 Clip 相似度
-            similarity_clip = sample.similarity
-            # 每个样本的 Prototype 相似度
-            similarity_prototype = similarities_prototype[i].item()
-            # 计算综合相似度
-            combined_similarity = alpha * similarity_prototype + (1 - alpha) * similarity_clip
-            combined_similarities.append(combined_similarity)
-
-        # 找到类内综合相似度最低的样本
-        combined_similarities = torch.tensor(combined_similarities)
-        least_similar_index = torch.argmin(combined_similarities).item()
-
-        # 判断是否需要替换
-        if combined_query_similarity > combined_similarities[least_similar_index]:
-            self.demonstrations.remove(sample_list[least_similar_index])
-            self.demonstrations.append(sample_to_remove)
-            self.label2sample[label].remove(sample_list[least_similar_index])
-            self.label2sample[label].append(sample_to_remove)
-        
-        assert len(self.demonstrations) == self.args.M
-    
-    def update_based_on_minmargin(self, sample_to_remove):
+    def update_based_on_minmargin(self, sample_to_remove): # 51.84
         query_embed = sample_to_remove.embed
         label = sample_to_remove.label
         query_marigin = self.compute_minMargin(query_embed,label)
         sample_list = self.label2sample[label]
 
         margins = [self.compute_minMargin(s.embed, label) for s in sample_list]
+        
+        # 找到 margin 最小的样本
+        min_margin_index = torch.argmin(torch.tensor(margins)).item()
+
+        if query_marigin > margins[min_margin_index]:
+            self.demonstrations.remove(sample_list[min_margin_index])
+            self.demonstrations.append(sample_to_remove)
+            self.label2sample[label].remove(sample_list[min_margin_index])
+            self.label2sample[label].append(sample_to_remove)
+
+            self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in self.label2sample[label]]), dim=0)
+            
+        assert len(self.demonstrations) == self.args.M
+    
+    def update_based_on_maxmargin(self, sample_to_remove): # 待评估
+        query_embed = sample_to_remove.embed
+        label = sample_to_remove.label
+        query_marigin = self.compute_maxMargin(query_embed,label)
+        sample_list = self.label2sample[label]
+
+        margins = [self.compute_maxMargin(s.embed, label) for s in sample_list]
         
         # 找到 margin 最小的样本
         min_margin_index = torch.argmin(torch.tensor(margins)).item()
@@ -217,8 +198,12 @@ class DynamicReteiever:
     def update_online(self,query_sample):
         if self.args.update_strategy == "default_prototype":
             self.update_based_on_default_prototype(query_sample)
-        if self.args.update_strategy == "default_margin":
-            self.update_based_on_default_margin(query_sample)
+        elif self.args.update_strategy == "default_minmargin":
+            self.update_based_on_default_minmargin(query_sample)
+        elif self.args.update_strategy == "default_maxmargin":
+            self.update_based_on_default_maxmargin(query_sample)
+        elif self.args.update_strategy == "gradient_prototype":
+            self.update_based_on_gradient_and_prototype(query_sample)
         elif self.args.update_strategy == "gradient_maxmargin":
             self.update_based_on_gradient_and_maxmargin(query_sample)
         elif self.args.update_strategy == "gradient_minmargin":
@@ -282,7 +267,7 @@ class DynamicReteiever:
         prototype_same_class = self.label_to_prototype[class_label]
         similarity_intra = torch.cosine_similarity(embed, prototype_same_class, dim=0)
 
-        # 类间相似度 (与其他类别的原型的最小相似度)
+        # 类间相似度 (与其他类别的原型的最大相似度)
         similarities_inter = []
         for label, prototype in self.label_to_prototype.items():
             if label != class_label:
@@ -360,7 +345,7 @@ class DynamicReteiever:
                 self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in self.label2sample[label]]), dim=0)
         assert len(self.demonstrations) == self.args.M
     
-    def update_based_on_default_margin(self, query_sample): 
+    def update_based_on_default_minmargin(self, query_sample): # 待评估
         query_embed = query_sample.embed
         label = query_sample.label
         inference_result = 1 if query_sample.pseudo_label == label else 0
@@ -376,7 +361,7 @@ class DynamicReteiever:
         # 找到当前类别中最不相似的样本（与原型相距最远的样本）
         sample_list = self.label2sample[label]
         # 计算支持集中每个样本的 margin
-        margins = [self.compute_minMargin_topk(s.embed, label) for s in sample_list]
+        margins = [self.compute_minMargin(s.embed, label) for s in sample_list]
 
         # 找到 margin 最小的样本
         min_margin_index = torch.argmin(torch.tensor(margins)).item()
@@ -394,6 +379,69 @@ class DynamicReteiever:
                 self.label2sample[label].append(query_sample)
                 # 更新类别原型
                 self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in self.label2sample[label]]), dim=0)
+        assert len(self.demonstrations) == self.args.M
+
+    def update_based_on_default_maxmargin(self, query_sample): # 待评估
+        query_embed = query_sample.embed
+        label = query_sample.label
+        inference_result = 1 if query_sample.pseudo_label == label else 0
+        # 更新该类别的推理历史记录
+        self.error_history[label].append(1 - inference_result)  # 记录错误推理
+
+        # 计算 Support Gradient
+        support_gradient = self.compute_gradient(query_sample)
+        self.support_gradient_list.append(support_gradient)
+        
+        query_minmargin = self.compute_maxMargin(query_embed,label)
+        
+        # 找到当前类别中最不相似的样本（与原型相距最远的样本）
+        sample_list = self.label2sample[label]
+        # 计算支持集中每个样本的 margin
+        margins = [self.compute_maxMargin(s.embed, label) for s in sample_list]
+
+        # 找到 margin 最小的样本
+        min_margin_index = torch.argmin(torch.tensor(margins)).item()
+
+        if inference_result == 1:
+            least_similar_sample = sample_list[min_margin_index]
+            least_similar_sample.embed = (1 - support_gradient) * least_similar_sample.embed + support_gradient * query_embed
+            # 更新类别原型
+            self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+        else: # 如果判断错误，那么一定要进行替换判断
+            if query_minmargin > margins[min_margin_index]:
+                self.demonstrations.remove(sample_list[min_margin_index])
+                self.demonstrations.append(query_sample)
+                self.label2sample[label].remove(sample_list[min_margin_index])
+                self.label2sample[label].append(query_sample)
+                # 更新类别原型
+                self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in self.label2sample[label]]), dim=0)
+        assert len(self.demonstrations) == self.args.M
+
+    def update_based_on_gradient_and_prototype(self,query_sample): # 待评估
+        query_embed = query_sample.embed
+        label = query_sample.label
+        inference_result = 1 if query_sample.pseudo_label == label else 0
+        # 更新该类别的推理历史记录
+        self.error_history[label].append(1 - inference_result)  # 记录错误推理
+
+        # 计算 Support Gradient
+        support_gradient = self.compute_gradient(query_sample)
+        self.support_gradient_list.append(support_gradient)
+        
+        # 获取当前类别的样本列表
+        sample_list = self.label2sample[label]
+        # 获取当前类别的原型向量
+        current_prototype = self.label_to_prototype[label]
+
+        # 找到当前类别中最不相似的样本（与原型相距最远的样本）
+        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
+        least_similar_index = torch.argmin(similarities).item()
+
+        least_similar_sample = sample_list[least_similar_index]
+        least_similar_sample.embed = (1 - support_gradient) * least_similar_sample.embed + support_gradient * query_embed
+        # 更新类别原型
+        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+            
         assert len(self.demonstrations) == self.args.M
 
     def update_based_on_gradient_and_maxmargin(self,query_sample):  # 56.84

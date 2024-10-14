@@ -1,6 +1,6 @@
 # 设定参数集合
 dataset_modes=("balanced")
-update_strategies=("gradient_minmargin" "gradient_equal_1" "default")
+update_strategies=("default_minmargin" "default_maxmargin" "gradient_prototype")
 
 
 # 遍历参数集合

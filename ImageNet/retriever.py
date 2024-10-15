@@ -417,7 +417,7 @@ class DynamicReteiever:
                 self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in self.label2sample[label]]), dim=0)
         assert len(self.demonstrations) == self.args.M
 
-    def update_based_on_gradient_and_prototype(self,query_sample): # 待评估
+    def update_based_on_gradient_and_prototype(self,query_sample): # 63.22
         query_embed = query_sample.embed
         label = query_sample.label
         inference_result = 1 if query_sample.pseudo_label == label else 0

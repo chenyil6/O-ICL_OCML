@@ -196,27 +196,36 @@ class DynamicReteiever:
         self.label2sample[label].append(new_sample)
     
     def update_online(self,query_sample):
-        if self.args.update_strategy == "default_prototype":
-            self.update_based_on_default_prototype(query_sample)
-        elif self.args.update_strategy == "default_minmargin":
-            self.update_based_on_default_minmargin(query_sample)
-        elif self.args.update_strategy == "default_maxmargin":
-            self.update_based_on_default_maxmargin(query_sample)
-        elif self.args.update_strategy == "gradient_prototype":
-            self.update_based_on_gradient_and_prototype(query_sample)
-        elif self.args.update_strategy == "gradient_maxmargin":
-            self.update_based_on_gradient_and_maxmargin(query_sample)
-        elif self.args.update_strategy == "gradient_minmargin":
-            self.update_based_on_gradient_and_minmargin(query_sample)
-        elif self.args.update_strategy == "gradient_minmargin_topk":
-            self.update_based_on_gradient_and_minmargin_topk(query_sample)
-        elif self.args.update_strategy == "gradient_equal_1":
-            self.update_based_on_gradient_equal_1(query_sample)
-        elif self.args.update_strategy == "maxmargin_equal_1":
-            self.update_based_on_gradient_and_maxmargin_euqal_1(query_sample)
+        if self.args.dataset_mode == "balanced":
+            if self.args.update_strategy == "default_prototype":
+                self.update_based_on_default_prototype(query_sample)
+            elif self.args.update_strategy == "default_minmargin":
+                self.update_based_on_default_minmargin(query_sample)
+            elif self.args.update_strategy == "default_maxmargin":
+                self.update_based_on_default_maxmargin(query_sample)
+            elif self.args.update_strategy == "gradient_prototype":
+                self.update_based_on_gradient_and_prototype(query_sample)
+            elif self.args.update_strategy == "gradient_maxmargin":
+                self.update_based_on_gradient_and_maxmargin(query_sample)
+            elif self.args.update_strategy == "gradient_minmargin":
+                self.update_based_on_gradient_and_minmargin(query_sample)
+            elif self.args.update_strategy == "gradient_minmargin_topk":
+                self.update_based_on_gradient_and_minmargin_topk(query_sample)
+            elif self.args.update_strategy == "gradient_equal_1":
+                self.update_based_on_gradient_equal_1(query_sample)
+            elif self.args.update_strategy == "maxmargin_equal_1":
+                self.update_based_on_gradient_and_maxmargin_euqal_1(query_sample)
+            elif self.args.update_strategy == "gradient_prototype_equal_1":
+                self.update_based_on_gradient_and_prototype_equal_1(query_sample)
+            else:
+                print("update_strategy is not effective.")
+                return
         else:
-            print("update_strategy is not effective.")
-            return
+            if self.args.update_strategy == "balance_gradient_prototype":
+                self.update_based_on_balance_balance_gradient_prototype(query_sample)
+            else:
+                print("update_strategy is not effective.")
+                return
 
     def compute_gradient(self, sample):
         alpha = 0.5
@@ -345,7 +354,7 @@ class DynamicReteiever:
                 self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in self.label2sample[label]]), dim=0)
         assert len(self.demonstrations) == self.args.M
     
-    def update_based_on_default_minmargin(self, query_sample): # 待评估
+    def update_based_on_default_minmargin(self, query_sample): # 44.42
         query_embed = query_sample.embed
         label = query_sample.label
         inference_result = 1 if query_sample.pseudo_label == label else 0
@@ -381,7 +390,7 @@ class DynamicReteiever:
                 self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in self.label2sample[label]]), dim=0)
         assert len(self.demonstrations) == self.args.M
 
-    def update_based_on_default_maxmargin(self, query_sample): # 待评估
+    def update_based_on_default_maxmargin(self, query_sample): # 41.3
         query_embed = query_sample.embed
         label = query_sample.label
         inference_result = 1 if query_sample.pseudo_label == label else 0
@@ -426,6 +435,33 @@ class DynamicReteiever:
 
         # 计算 Support Gradient
         support_gradient = self.compute_gradient(query_sample)
+        self.support_gradient_list.append(support_gradient)
+        
+        # 获取当前类别的样本列表
+        sample_list = self.label2sample[label]
+        # 获取当前类别的原型向量
+        current_prototype = self.label_to_prototype[label]
+
+        # 找到当前类别中最不相似的样本（与原型相距最远的样本）
+        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
+        least_similar_index = torch.argmin(similarities).item()
+
+        least_similar_sample = sample_list[least_similar_index]
+        least_similar_sample.embed = (1 - support_gradient) * least_similar_sample.embed + support_gradient * query_embed
+        # 更新类别原型
+        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+            
+        assert len(self.demonstrations) == self.args.M
+
+    def update_based_on_gradient_and_prototype_equal_1(self,query_sample): # 待评估
+        query_embed = query_sample.embed
+        label = query_sample.label
+        inference_result = 1 if query_sample.pseudo_label == label else 0
+        # 更新该类别的推理历史记录
+        self.error_history[label].append(1 - inference_result)  # 记录错误推理
+
+        # 计算 Support Gradient
+        support_gradient = 1
         self.support_gradient_list.append(support_gradient)
         
         # 获取当前类别的样本列表
@@ -569,3 +605,55 @@ class DynamicReteiever:
         self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
             
         assert len(self.demonstrations) == self.args.M
+    
+    def update_based_on_balance_balance_gradient_prototype(self, query_sample,max_samples_num=10): # 待评估
+        query_embed = query_sample.embed
+        label = query_sample.label
+        inference_result = 1 if query_sample.pseudo_label == label else 0
+        # 更新该类别的推理历史记录
+        self.error_history[label].append(1 - inference_result)  # 记录错误推理
+
+        # 计算 Support Gradient
+        support_gradient = self.compute_gradient(query_sample)
+        self.support_gradient_list.append(support_gradient)
+        
+        # 获取当前类别的样本列表
+        sample_list = self.label2sample[label]
+        # 获取当前类别的原型向量
+        current_prototype = self.label_to_prototype[label]
+        
+        if label not in self.label2sample:
+            self.demonstrations.append(query_sample)
+            self.label2sample[label] = [query_sample]
+        elif len(self.label2sample[label]) < max_samples_num:
+            self.demonstrations.append(query_sample)
+            self.label2sample[label].append(query_sample)
+        else:
+            # 找到当前类别中最不相似的样本（与原型相距最远的样本）
+            similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
+            least_similar_index = torch.argmin(similarities).item()
+
+            least_similar_sample = sample_list[least_similar_index]
+            least_similar_sample.embed = (1 - support_gradient) * least_similar_sample.embed + support_gradient * query_embed
+
+        # 更新类别原型
+        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+        
+        while len(self.demonstrations) > self.args.M:
+            # 从最大类别中删掉一个离prototype最远的样本
+            max_label = max(self.label2sample, key=lambda k: len(self.label2sample[k]))
+            max_sample_list = self.label2sample[max_label]
+            removed_sample,_ = self.get_least_similar_sample(max_sample_list)
+            self.label2sample[max_label].remove(removed_sample)
+            self.demonstrations.remove(removed_sample)
+            # 更新最大类别的prototype
+            self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in self.label2sample[max_label]]), dim=0)
+        
+        assert len(self.demonstrations) == self.args.M
+
+
+        
+    
+
+
+        

@@ -432,7 +432,6 @@ class DynamicReteiever:
         inference_result = 1 if query_sample.pseudo_label == label else 0
         # 更新该类别的推理历史记录
         self.error_history[label].append(1 - inference_result)  # 记录错误推理
-
         # 计算 Support Gradient
         support_gradient = self.compute_gradient(query_sample)
         self.support_gradient_list.append(support_gradient)
@@ -609,19 +608,7 @@ class DynamicReteiever:
     def update_based_on_balance_balance_gradient_prototype(self, query_sample,max_samples_num=10): # 待评估
         query_embed = query_sample.embed
         label = query_sample.label
-        inference_result = 1 if query_sample.pseudo_label == label else 0
-        # 更新该类别的推理历史记录
-        self.error_history[label].append(1 - inference_result)  # 记录错误推理
 
-        # 计算 Support Gradient
-        support_gradient = self.compute_gradient(query_sample)
-        self.support_gradient_list.append(support_gradient)
-        
-        # 获取当前类别的样本列表
-        sample_list = self.label2sample[label]
-        # 获取当前类别的原型向量
-        current_prototype = self.label_to_prototype[label]
-        
         if label not in self.label2sample:
             self.demonstrations.append(query_sample)
             self.label2sample[label] = [query_sample]
@@ -629,6 +616,17 @@ class DynamicReteiever:
             self.demonstrations.append(query_sample)
             self.label2sample[label].append(query_sample)
         else:
+            inference_result = 1 if query_sample.pseudo_label == label else 0
+            # 更新该类别的推理历史记录
+            self.error_history[label].append(1 - inference_result)  # 记录错误推理
+
+            # 计算 Support Gradient
+            support_gradient = self.compute_gradient(query_sample)
+            self.support_gradient_list.append(support_gradient)
+            # 获取当前类别的样本列表
+            sample_list = self.label2sample[label]
+            # 获取当前类别的原型向量
+            current_prototype = self.label_to_prototype[label]
             # 找到当前类别中最不相似的样本（与原型相距最远的样本）
             similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
             least_similar_index = torch.argmin(similarities).item()
@@ -637,7 +635,7 @@ class DynamicReteiever:
             least_similar_sample.embed = (1 - support_gradient) * least_similar_sample.embed + support_gradient * query_embed
 
         # 更新类别原型
-        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in self.label2sample[label]]), dim=0)
         
         while len(self.demonstrations) > self.args.M:
             # 从最大类别中删掉一个离prototype最远的样本

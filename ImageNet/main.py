@@ -12,7 +12,7 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="0")
+    parser.add_argument("--device", type=str, default="3")
     parser.add_argument(
         "--model",
         type=str,

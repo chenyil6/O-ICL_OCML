@@ -11,7 +11,6 @@ class DynamicReteiever:
     def __init__(self, args):
         self.args = args
         self.demonstrations = []
-        self.pool = []
         self.label2sample = dict()
         self.dnum = 4
         self.label_to_prototype = {}
@@ -188,13 +187,6 @@ class DynamicReteiever:
         least_similar_index = torch.argmin(similarities).item()
         return sample_list[least_similar_index], similarities[least_similar_index].item()
 
-    def replace_sample(self, old_sample, new_sample, label):
-        """替换 memory bank 中的旧样本"""
-        self.demonstrations.remove(old_sample)
-        self.label2sample[label].remove(old_sample)
-        self.demonstrations.append(new_sample)
-        self.label2sample[label].append(new_sample)
-    
     def update_online(self,query_sample):
         if self.args.dataset_mode == "balanced":
             if self.args.update_strategy == "default_prototype":
@@ -234,7 +226,7 @@ class DynamicReteiever:
 
         error_rate = sum(self.error_history[sample.label]) / len(self.error_history[sample.label]) if len(self.error_history[sample.label]) > 0 else 0
 
-        clip_similairity = (sample.similarity+1)/2
+        clip_similairity = (sample.quality+1)/2
 
         confidence = sample.gt_score
         # 基础 Support Gradient 公式

@@ -6,6 +6,8 @@ import json
 import numpy as np
 import time
 from collections import defaultdict, deque
+import logging
+logger = logging.getLogger(__name__)
 
 class DynamicReteiever:
     def __init__(self, args):
@@ -48,8 +50,15 @@ class DynamicReteiever:
 
     def get_topk_cosine(self, sample):
         demonstration_embeds = torch.stack([sample.embed for sample in self.demonstrations], dim=0)
+        #logging.info(f"demonstration_embeds 的设备在: {demonstration_embeds.device}")
+        #device_set = "cuda:" + str(self.args.device)
+        #device = torch.device(device_set)
+        #demonstration_embeds = demonstration_embeds.to(device)
+        #sample_embed = sample.embed.to(device)
         scores = torch.cosine_similarity(demonstration_embeds, sample.embed, dim=-1)
+        #scores = torch.cosine_similarity(demonstration_embeds, sample_embed, dim=-1)
         values, indices = torch.topk(scores, self.dnum, largest=True)
+        #indices = indices.cpu().tolist()
         indices = indices.tolist()
         return indices
     
@@ -229,7 +238,7 @@ class DynamicReteiever:
         clip_similairity = (sample.quality+1)/2
 
         confidence = sample.gt_score
-        # 基础 Support Gradient 公式
+        # Support Gradient 公式
         support_gradient = alpha * (1 - confidence) + beta *error_rate  + delta * clip_similairity
 
         return support_gradient

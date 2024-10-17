@@ -1,6 +1,7 @@
 import torch
 from classification_utils import IMAGENET_1K_CLASS_ID_TO_LABEL,IMAGENET_CLASSNAMES
 import math
+import numpy as np
 
 
 def get_imagenet_prompt(label=None) -> str:
@@ -55,3 +56,24 @@ def get_predicted_classname(logprobs, k, class_id_to_name):
 
     return predicted_classnames, predicted_logprobs
 
+def custom_collate_fn(batch):
+    """
+    Collate function for DataLoader that collates a list of dicts into a dict of lists.
+    """
+    collated_batch = {}
+    for key in batch[0].keys():
+        collated_batch[key] = [item[key] for item in batch]
+    return collated_batch
+
+def prepare_eval_samples(test_dataset,batch_size, seed):
+    np.random.seed(seed)
+    random_indices = np.random.choice(len(test_dataset), len(test_dataset), replace=False) #
+    dataset = torch.utils.data.Subset(test_dataset, random_indices)
+    sampler = torch.utils.data.distributed.DistributedSampler(dataset)
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        sampler=sampler,
+        collate_fn=custom_collate_fn,
+    )
+    return loader

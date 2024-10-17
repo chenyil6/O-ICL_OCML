@@ -7,12 +7,21 @@ sys.path.append('/data/chy/online')
 from open_flamingo_4.open_flamingo.src.factory import create_model_and_transforms
 from transformers import IdeficsForVisionText2Text, AutoProcessor
 import json
+import logging
+
+# 设置日志的基本配置
+logging.basicConfig(level=logging.INFO,  # 日志级别
+                    format='%(asctime)s - %(levelname)s - %(message)s',  # 日志格式
+                    handlers=[
+                        logging.FileHandler("program_log.log"),  # 输出到文件
+                        logging.StreamHandler()  # 输出到控制台
+                    ])
 
 logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="0")
+    parser.add_argument("--device", type=str, default="1")
     parser.add_argument(
         "--model",
         type=str,

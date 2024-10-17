@@ -8,13 +8,15 @@ from PIL import Image
 from classification_utils import IMAGENET_CLASSNAMES_100,IMAGENET_CLASSNAMES
 from torch.utils.data import Subset
 from typing import Optional
-from utils import get_topk_classifications
+from utils import get_topk_classifications,prepare_eval_samples
 import numpy as np
 import random
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
 import json
 import pickle
+import logging
+logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
 class Sample:
@@ -51,6 +53,20 @@ class Online_ICL_Old:
         self.retriever = DynamicReteiever(args)
         self.predictions = []
         self.topk = 1
+        self.batch_size = 32
+        self.features_data_train = {}
+        self.features_data__train_file = "./train_idx2embed_quality.pkl"
+        self.features_data_val = {}
+        self.features_data__val_file = "./val_idx2embed.pkl"
+
+        if os.path.exists(self.features_data__train_file):
+            with open(self.features_data__train_file, 'rb') as f:
+                self.features_data_train = pickle.load(f)
+
+        if os.path.exists(self.features_data__val_file):
+            with open(self.features_data__val_file, 'rb') as f:
+                self.features_data_val = pickle.load(f)
+
 
     def get_image_embedding(self, image):
         inputs = self.embedding_processor(images=image, return_tensors="pt")
@@ -165,7 +181,7 @@ class Online_ICL_Old:
         sample.pseudo_label = predicted_classnames[0]
 
     def inference(self, sample):
-        sample = self.preprocess(sample)
+        sample = self.preprocess_val(sample)
         self.test_sample_num += 1
         if self.args.model == "open_flamingo":
             self.get_response_OFv2(sample)
@@ -174,15 +190,22 @@ class Online_ICL_Old:
         if sample.pseudo_label == sample.label:
             self.right_sample_num += 1
 
-    def preprocess(self, sample):
+    def preprocess_train(self, sample):
         idx = sample["id"]
         image = sample["image"]
         label = sample["class_name"]
         class_id = sample["class_id"]
-        embed = self.get_image_embedding(image).squeeze().cpu()
-        label_embed = self.get_text_embedding(label).squeeze().cpu()
-        similarity = torch.cosine_similarity(embed.unsqueeze(0), label_embed.unsqueeze(0), dim=1).item()
-        sample = Sample(idx, image, label, embed,similarity,class_id, None,None,None)
+        embed,quality = self.features_data_train[idx]
+        sample = Sample(idx, image, label, embed,quality,class_id, None,None,None)
+        return sample
+    
+    def preprocess_val(self, sample):
+        idx = sample["id"]
+        image = sample["image"]
+        label = sample["class_name"]
+        class_id = sample["class_id"]
+        embed = self.features_data_val[idx]
+        sample = Sample(idx, image, label, embed,None,class_id, None,None,None)
         return sample
     
     def process_dict(self,sample):
@@ -256,16 +279,13 @@ class Online_ICL_Old:
         sample_pool_rng = random.Random(self.args.seed + 1)  # 用于打乱 sample_pool 的随机生成器
         class_selection_rng = random.Random(self.args.seed + 3)  # 用于选择 no_sample_classes 的随机生成器
     
-        # 从train_dataset中取support set大小为5，取sample pool 大小10个
-
         support_set = []
         sample_pool = []
 
         print("get memory bank and sample pool ...")
         if self.args.dataset_mode == "balanced":
-            for i in range(len(self.all_class_names)):
-                class_name = self.all_class_names[i]
-                data_list = train_dataset.get_data_list_by_class(class_name=class_name)
+            for class_id in tqdm(range(len(self.all_class_names)),desc="get samples for each class"):
+                data_list = train_dataset.get_data_list_by_class(class_id=class_id)
                 support_set.extend(data_list[0:10])
                 sample_pool.extend(data_list[50:150])
         else: # imbalanced
@@ -310,7 +330,6 @@ class Online_ICL_Old:
         self.test_sample_num = 0
         self.right_sample_num = 0
 
-        # 需要对数据流的数据做推理
         for idx in tqdm(range(len(sample_pool)), desc=f"Updating the support set..."):
             self.retriever.update()
 
@@ -588,7 +607,7 @@ class Online_ICL:
         sample_pool = []
         print("get memory bank and sample pool ...")
         if self.args.dataset_mode == "balanced":
-            for class_id in range(len(self.all_class_names)):
+            for class_id in tqdm(range(len(self.all_class_names)),desc="get samples for each class"):
                 data_list = train_dataset.get_data_list_by_class(class_id=class_id)
                 support_set.extend(data_list[0:10])
                 sample_pool.extend(data_list[50:150])
@@ -676,14 +695,14 @@ class FewShot:
         self.processor = processor
         self.test_sample_num = 0
         self.right_sample_num = 0
-        self.all_class_names = IMAGENET_CLASSNAMES_100
+        self.all_class_names = IMAGENET_CLASSNAMES
         self.retriever = DynamicReteiever(args)
         self.predictions = []
-        self.topk = 1
+        self.topk = 1       
         self.features_data_train = {}
         self.features_data__train_file = "./train_idx2embed_quality.pkl"
         self.features_data_val = {}
-        self.features_data__val_file = "./val_idx2embed_quality.pkl"
+        self.features_data__val_file = "./val_idx2embed.pkl"
 
         if os.path.exists(self.features_data__train_file):
             with open(self.features_data__train_file, 'rb') as f:
@@ -704,18 +723,24 @@ class FewShot:
         vision_x = torch.cat(vision_x, dim=0)
         vision_x = vision_x.unsqueeze(1).unsqueeze(0)
         vision_x = vision_x.to(self.device).half()
+        # Log the device information for vision_x
+        logger.info(f"vision_x is on device: {vision_x.device}")
         return vision_x
-    
+
     def prepare_text(self,ice_text):
         self.tokenizer.padding_side = "left"  # For generation padding tokens should be on the left
         lang_x = self.tokenizer(ice_text, return_tensors="pt", )
         lang_x = {k: v.to(self.device) for k, v in lang_x.items()}
+        logger.info(f"lang_x is on device: {next(iter(lang_x.values())).device}")
         return lang_x
 
     def get_response_OFv2(self, sample):
         ice_img,ice_text,demonstrations = self.retriever.get_final_query(sample)
         vision_x = self.prepare_image(ice_img)
         lang_x = self.prepare_text(ice_text)
+        # Check and log if the model is on the correct device
+        model_device = next(self.model.parameters()).device
+        logger.info(f"Model is on device: {model_device}")
         with torch.no_grad():
             outputs = self.model.generate(
                 vision_x=vision_x,
@@ -800,7 +825,6 @@ class FewShot:
         )
         sample.pseudo_label = predicted_classnames[0]
         
-
     def inference(self, sample):
         sample = self.preprocess_val(sample)
         self.test_sample_num += 1
@@ -836,6 +860,7 @@ class FewShot:
             index_file="./imagenet_class_indices.pkl"  # 指定索引文件路径
         )
         test_dataset = ImageNetDataset(os.path.join("/data/hyh/imagenet/data", "val"))
+       
         # 设置全局随机种子
         random.seed(self.args.seed)
     
@@ -847,7 +872,7 @@ class FewShot:
         sample_pool=[]
         print("get supportng set ...")
         if self.args.dataset_mode == "balanced":
-            for class_id in range(len(self.all_class_names)):
+            for class_id in tqdm(range(len(self.all_class_names)),desc="get samples for each class"):
                 data_list = train_dataset.get_data_list_by_class(class_id=class_id)
                 support_set.extend(data_list[0:10])
                 sample_pool.extend(data_list[50:150])
@@ -867,7 +892,7 @@ class FewShot:
 
         for idx in tqdm(range(len(support_set)), desc=f"Preprocess Supporting set..."):
             # 对sample进行预处理
-            support_sample = self.preprocess(support_set[idx])
+            support_sample = self.preprocess_train(support_set[idx])
             self.retriever.demonstrations.append(support_sample)
 
         # 打乱 validate_set 的索引
@@ -876,10 +901,10 @@ class FewShot:
 
         self.test_sample_num = 0
         self.right_sample_num = 0
-        for idx in tqdm((shuffled_indices), desc=f"Inference ImageNet..."):
+        for idx in tqdm(shuffled_indices, desc="Inference ImageNet..."):
             validate_sample = test_dataset[idx]
             self.inference(validate_sample)
+
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc
-
         return results,self.predictions

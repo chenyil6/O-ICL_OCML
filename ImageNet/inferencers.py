@@ -653,17 +653,16 @@ class Online_ICL:
 
         # 需要对数据流的数据做推理
         for idx in tqdm(range(len(sample_pool)), desc=f"inferenc sample pool meanwhile updating the support set..."):
-            sample = sample_pool.pop(0)
+            sample = sample_pool[idx]
             sample = self.preprocess_train(sample)
             self.inference(sample)
-            del sample 
 
         self.predictions = []
         print(f"Successfully update the support set with sample pool, now support set size: {len(self.retriever.demonstrations)}")
-        self.visualize_tsne("Updated Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-updated_memory_bank.jpg")
+        self.visualize_tsne("Updated Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-updated_memory_bank-alpha={self.args.alpha}-beta={self.args.beta}-delta={self.args.delta}.jpg")
         print("Inference using the latest supporting set...")
 
-        file_path = f'./{self.args.update_strategy}-gradientUpdate.json'  # 确保 self.args.update_strategy 有效
+        file_path = f'./{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}-beta={self.args.beta}-delta={self.args.delta}.json'  # 确保 self.args.update_strategy 有效
         with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
             json.dump(self.retriever.support_gradient_list, json_file, indent=4)
 

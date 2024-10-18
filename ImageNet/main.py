@@ -37,7 +37,10 @@ def get_args():
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
     parser.add_argument("--update_strategy", type=str, default="noUpdate") # noUpdate;prototype;default_margin;minmargin
-    parser.add_argument("--M", type=int, default=10000)
+    parser.add_argument("--M", type=int, default=1000)
+    parser.add_argument("--alpha", type=float, default=1.0)
+    parser.add_argument("--beta", type=float, default=0)
+    parser.add_argument("--delta", type=float, default=0)
     arguments = parser.parse_args()
     return arguments
 
@@ -112,7 +115,7 @@ if __name__ == "__main__":
         results = None
 
     results = {"device":args.device,"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
-               "update_strategy":args.update_strategy,"results": results}
+               "update_strategy":args.update_strategy,"alpha": args.alpha,"beta": args.beta,"delta": args.delta,"results": results}
     print("-------------------------final-results-----------------------")
     print(results)
     
@@ -125,7 +128,7 @@ if __name__ == "__main__":
             json.dump(predictions, json_file, indent=4)
     elif args.method == "Online_ICL": 
         res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
-                                                f"-update_strategy={args.update_strategy}.json")
+                                                f"-update_strategy={args.update_strategy}-alpha={args.alpha}-beta={args.beta}-delta={args.delta}.json")
 
         
         with open(res_file_last, 'w') as json_file:

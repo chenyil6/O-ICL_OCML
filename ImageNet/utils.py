@@ -1,8 +1,11 @@
 import torch
-from classification_utils import IMAGENET_1K_CLASS_ID_TO_LABEL,IMAGENET_CLASSNAMES
+from classification_utils import IMAGENET_1K_CLASS_ID_TO_LABEL,IMAGENET_100_CLASS_ID_TO_LABEL
 import math
 import numpy as np
+import logging
+from typing import List
 
+logger = logging.getLogger(__name__)
 
 def get_imagenet_prompt(label=None) -> str:
     return f"<image>Output:{label if label is not None else ''}{'<|endofchunk|>' if label is not None else ''}"
@@ -38,6 +41,74 @@ def get_topk_classifications(outputs,classnames_tokens,topk):
     return predicted_classnames,predicted_logprobs,overall_log_probs
 
 
+def get_topk_classifications_batch(outputs, classnames_tokens, topk,class_id_to_name = IMAGENET_1K_CLASS_ID_TO_LABEL):
+    """
+    Computes the top-k classifications for a batch of samples.
+
+    Args:
+        outputs: The outputs from model.generate, which includes scores.
+        classnames_tokens: List of lists, tokenized class names.
+        topk: int, number of top predictions to return.
+        class_id_to_name: A dictionary mapping class indices to class names.
+
+    Returns:
+        predicted_classnames: List of lists containing predicted class names for each sample.
+        predicted_logprobs: List of lists containing predicted log probabilities for each sample.
+        overall_log_probs: Tensor of shape (batch_size, num_classes) containing the normalized probabilities.
+    """
+    batch_size = outputs.scores[0].size(0)  # Get the batch size from the first score tensor
+    num_classes = len(classnames_tokens)
+    num_generation_steps = len(outputs.scores)  # Number of tokens generated
+
+    # Stack the scores into a tensor of shape (num_generation_steps, batch_size, vocab_size)
+    scores_stack = torch.stack(outputs.scores, dim=0)  # shape (num_generation_steps, batch_size, vocab_size)
+
+    # Initialize the overall log probabilities tensor
+    overall_log_probs = torch.zeros(batch_size, num_classes)
+
+    # Compute the log probabilities for each sample in the batch
+    for batch_idx in range(batch_size):
+        for class_idx in range(num_classes):
+            ct = classnames_tokens[class_idx]
+            classname_tokens_num = len(ct)
+            log_prob = 0
+            valid = True
+
+            for i in range(classname_tokens_num):
+                if i >= num_generation_steps:
+                    # Generated tokens are less than class name tokens
+                    log_prob = -float('inf')
+                    valid = False
+                    break
+
+                # Get the log scores for this position
+                logits = scores_stack[i, batch_idx, :]  # Shape: (vocab_size,)
+                log_scores = torch.nn.functional.log_softmax(logits, dim=-1)
+
+                # Get the log probability for the class token at position i
+                token_id = ct[i]
+                log_prob += log_scores[token_id].item()
+
+            if valid:
+                log_prob /= classname_tokens_num  # Normalize by the number of tokens
+                overall_log_probs[batch_idx, class_idx] = torch.exp(torch.tensor(log_prob))
+
+    # Normalize the probabilities for each sample
+    overall_log_probs = overall_log_probs / overall_log_probs.sum(dim=1, keepdim=True)
+
+    # Get top-k predictions for each sample
+    predicted_classnames = []
+    predicted_logprobs = []
+
+    for batch_idx in range(batch_size):
+        values, indices = torch.topk(overall_log_probs[batch_idx], k=topk)
+        pred_classnames = [class_id_to_name[ix.item()] for ix in indices]
+        pred_logprobs = values.tolist()
+        predicted_classnames.append(pred_classnames)
+        predicted_logprobs.append(pred_logprobs)
+
+    return predicted_classnames, predicted_logprobs, overall_log_probs
+
 def get_predicted_classname(logprobs, k, class_id_to_name):
     """
         Args:
@@ -55,25 +126,3 @@ def get_predicted_classname(logprobs, k, class_id_to_name):
     predicted_logprobs = values.tolist()
 
     return predicted_classnames, predicted_logprobs
-
-def custom_collate_fn(batch):
-    """
-    Collate function for DataLoader that collates a list of dicts into a dict of lists.
-    """
-    collated_batch = {}
-    for key in batch[0].keys():
-        collated_batch[key] = [item[key] for item in batch]
-    return collated_batch
-
-def prepare_eval_samples(test_dataset,batch_size, seed):
-    np.random.seed(seed)
-    random_indices = np.random.choice(len(test_dataset), len(test_dataset), replace=False) #
-    dataset = torch.utils.data.Subset(test_dataset, random_indices)
-    sampler = torch.utils.data.distributed.DistributedSampler(dataset)
-    loader = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=batch_size,
-        sampler=sampler,
-        collate_fn=custom_collate_fn,
-    )
-    return loader

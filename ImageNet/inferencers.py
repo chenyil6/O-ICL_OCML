@@ -8,7 +8,7 @@ from PIL import Image
 from classification_utils import IMAGENET_CLASSNAMES_100,IMAGENET_CLASSNAMES
 from torch.utils.data import Subset
 from typing import Optional
-from utils import get_topk_classifications,prepare_eval_samples
+from utils import get_topk_classifications,get_imagenet_prompt,get_topk_classifications_batch
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -16,6 +16,8 @@ from sklearn.manifold import TSNE
 import json
 import pickle
 import logging
+from typing import List
+
 logger = logging.getLogger(__name__)
 
 @dataclasses.dataclass
@@ -373,7 +375,7 @@ class Online_ICL:
         self.features_data_train = {}
         self.features_data__train_file = "./train_idx2embed_quality.pkl"
         self.features_data_val = {}
-        self.features_data__val_file = "./val_idx2embed_quality.pkl"
+        self.features_data__val_file = "./val_idx2embed.pkl"
 
         if os.path.exists(self.features_data__train_file):
             with open(self.features_data__train_file, 'rb') as f:
@@ -497,7 +499,7 @@ class Online_ICL:
         sample.pseudo_label = predicted_classnames[0]
 
     def inference(self, sample):
-        #sample = self.preprocess(sample)
+        sample = self.preprocess_train(sample)
         self.test_sample_num += 1
         if self.args.model == "open_flamingo":
             self.get_response_OFv2(sample)
@@ -506,6 +508,134 @@ class Online_ICL:
         if sample.pseudo_label == sample.label:
             self.right_sample_num += 1
         self.retriever.update_online(sample)
+
+    def evaluate_batch_on_OFv2(self, batch_samples):
+        batch_images = []
+        batch_text = []
+        for sample in batch_samples: # 遍历每个sample，找到分别对应的context
+            ice_img,ice_text,demonstrations = self.retriever.get_final_query(sample)
+            batch_images.append(ice_img)
+            batch_text.append(ice_text)
+
+        batch_images = self._prepare_images(batch_images)
+        ctx_input_ids, ctx_attention_mask = self._prepare_text(batch_text)
+
+        _lang_x = torch.cat([ctx_input_ids], dim=1)
+        _attention_mask = torch.cat(
+            [
+                ctx_attention_mask,
+            ],
+            dim=1,
+        )
+        _vision_x = batch_images
+
+        with torch.no_grad():
+            outputs = self.model.generate(
+                vision_x=_vision_x,
+                lang_x=_lang_x,
+                attention_mask=_attention_mask,
+                max_new_tokens=20,
+                min_new_tokens=1,
+                num_beams=1,
+                output_scores=True,
+                return_dict_in_generate=True
+            )
+
+        # Tokenize class names
+        classnames_tokens = self.tokenizer(self.all_class_names)["input_ids"]
+
+        # Get top-k classifications for the batch
+        predicted_classnames_batch, predicted_logprobs_batch, overall_log_probs = get_topk_classifications_batch(
+            outputs,
+            classnames_tokens,
+            self.topk
+        )
+
+        # Process predictions for each sample
+        for idx, sample in enumerate(batch_samples):
+            y_i = sample.label
+            gt_label_index = self.all_class_names.index(y_i)
+            gt_label_confidence = overall_log_probs[idx, gt_label_index].item()
+
+            self.predictions.append(
+                {
+                    "id": sample.idx,
+                    "gt_label": y_i,
+                    "pred_label": predicted_classnames_batch[idx][0],
+                    "gt_id": sample.class_id,
+                    "pred_score": predicted_logprobs_batch[idx][0],
+                    "gt_score": gt_label_confidence,
+                    "prompt_text": batch_text[idx],
+                    "prompt_label": [dm.class_id for dm in demonstrations]
+                }
+            )
+            sample.pred_score = predicted_logprobs_batch[idx][0]
+            sample.pseudo_label = predicted_classnames_batch[idx][0]
+            sample.gt_score = gt_label_confidence
+        
+    def _prepare_images(self, batch: List[List[Image.Image]]) -> torch.Tensor:
+        """
+        Convert images to tensors, reshape them, and stack them.
+        Args:
+            batch: A list of lists of images.
+        Returns:
+            preprocessed images (tensors) or None
+                shape (B, T_img, F, C, H, W)
+                None if no images in batch
+        """
+        images_per_example = max(len(x) for x in batch)
+        batch_images = None
+        for iexample, example in enumerate(batch):
+            for iimage, image in enumerate(example):
+                preprocessed = self.image_processor(image)
+                if batch_images is None:
+                    batch_images = torch.zeros(
+                        (len(batch), images_per_example, 1) + preprocessed.shape,
+                        dtype=preprocessed.dtype,
+                    )
+                batch_images[iexample, iimage, 0] = preprocessed
+        if batch_images is not None:
+            batch_images = batch_images.to(self.device).half()
+        return batch_images
+
+    def _prepare_text(
+            self,
+            batch: List[List[str]],
+            padding="longest",
+            truncation=True,
+            max_length=2000,
+        ):
+            """
+            Tokenize the text and stack them.
+            Args:
+                batch: A list of lists of strings.
+            Returns:
+                input_ids (tensor)
+                    shape (B, T_txt)
+                attention_mask (tensor)
+                    shape (B, T_txt)
+            """
+            self.tokenizer.padding_side = "left"
+            encodings = self.tokenizer(
+                batch,
+                padding=padding,
+                truncation=truncation,
+                return_tensors="pt",
+                max_length=max_length,
+            )
+            input_ids, attention_mask = encodings["input_ids"], encodings["attention_mask"]
+            input_ids = input_ids.to(self.device)
+            attention_mask = attention_mask.to(self.device)
+            return input_ids, attention_mask
+
+    def inference_batch(self,batch_samples):
+        batch_samples = [self.preprocess_val(sample) for sample in batch_samples]
+        self.test_sample_num += len(batch_samples)
+        if self.args.model == "open_flamingo":
+            self.evaluate_batch_on_OFv2(batch_samples)
+        for sample in batch_samples:
+            if sample.pseudo_label == sample.label:
+                self.right_sample_num += 1
 
     def preprocess_train(self, sample):
         idx = sample["id"]
@@ -594,7 +724,8 @@ class Online_ICL:
             index_file="./imagenet_class_indices.pkl"  # 指定索引文件路径
         )
         test_dataset = ImageNetDataset(os.path.join("/data/hyh/imagenet/data", "val"))
-        
+        # 子集
+        validate_set = Subset(test_dataset, list(range(5000))) #取前5000个样本作为validate set
         # 设置全局随机种子
         random.seed(self.args.seed)
     
@@ -646,16 +777,24 @@ class Online_ICL:
             #self.retriever.pool.append(sample_pool_sample)
 
         # 打乱 validate_set 的索引
-        shuffled_validate_indices = list(range(len(test_dataset)))
-        validate_rng.shuffle(shuffled_validate_indices)
-        # 创建一个新的 Subset 作为打乱后的 validate_dataset
-        validate_dataset = Subset(test_dataset, shuffled_validate_indices)
+        shuffled_indices = list(range(len(validate_set)))
+        validate_rng.shuffle(shuffled_indices)
 
         # 需要对数据流的数据做推理
-        for idx in tqdm(range(len(sample_pool)), desc=f"inferenc sample pool meanwhile updating the support set..."):
-            sample = sample_pool[idx]
-            sample = self.preprocess_train(sample)
+        # for idx in tqdm(range(len(sample_pool)), desc=f"inferenc sample pool meanwhile updating the support set..."):
+        #     sample = sample_pool.pop()
+        #     sample = self.preprocess_train(sample)
+        #     self.inference(sample)
+        #     del sample
+
+        total_samples = len(sample_pool)  # 获取样本池的初始大小
+        pbar = tqdm(total=total_samples, desc="Inferencing sample pool while updating the support set")
+
+        while sample_pool:  # 当 sample_pool 不为空时继续循环
+            sample = sample_pool.pop()
             self.inference(sample)
+            del sample
+            pbar.update(1)  # 每处理一个样本，更新进度条
 
         self.predictions = []
         print(f"Successfully update the support set with sample pool, now support set size: {len(self.retriever.demonstrations)}")
@@ -668,9 +807,11 @@ class Online_ICL:
 
         self.test_sample_num = 0
         self.right_sample_num = 0
-        for idx in tqdm(range(len(validate_dataset)), desc=f"Inference Support Set..."):
-            sample = self.preprocess_val(validate_dataset[idx])
-            self.inference(sample)
+        for i in tqdm(range(0, len(validate_set), batch_size), desc=f"Inference ImageNet..."):
+            batch_indices = shuffled_indices[i:i + batch_size]
+            batch_samples = [validate_set[idx] for idx in batch_indices]
+            self.inference_batch(batch_samples)
+
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc
 
@@ -694,7 +835,7 @@ class FewShot:
         self.processor = processor
         self.test_sample_num = 0
         self.right_sample_num = 0
-        self.all_class_names = IMAGENET_CLASSNAMES
+        self.all_class_names = IMAGENET_CLASSNAMES_100
         self.retriever = DynamicReteiever(args)
         self.predictions = []
         self.topk = 1       
@@ -717,34 +858,31 @@ class FewShot:
             image_features = self.embedding_model.get_image_features(**inputs)
         return image_features
 
-    def prepare_image(self,img_list):
-        vision_x = [self.image_processor(img).unsqueeze(0) for img in img_list]
-        vision_x = torch.cat(vision_x, dim=0)
-        vision_x = vision_x.unsqueeze(1).unsqueeze(0)
-        vision_x = vision_x.to(self.device).half()
-        # Log the device information for vision_x
-        logger.info(f"vision_x is on device: {vision_x.device}")
-        return vision_x
+    def evaluate_batch_on_OFv2(self, batch_samples):
+        batch_images = []
+        batch_text = []
+        for sample in batch_samples: # 遍历每个sample，找到分别对应的context
+            ice_img,ice_text,demonstrations = self.retriever.get_final_query(sample)
+            batch_images.append(ice_img)
+            batch_text.append(ice_text)
 
-    def prepare_text(self,ice_text):
-        self.tokenizer.padding_side = "left"  # For generation padding tokens should be on the left
-        lang_x = self.tokenizer(ice_text, return_tensors="pt", )
-        lang_x = {k: v.to(self.device) for k, v in lang_x.items()}
-        logger.info(f"lang_x is on device: {next(iter(lang_x.values())).device}")
-        return lang_x
+        batch_images = self._prepare_images(batch_images)
+        ctx_input_ids, ctx_attention_mask = self._prepare_text(batch_text)
 
-    def get_response_OFv2(self, sample):
-        ice_img,ice_text,demonstrations = self.retriever.get_final_query(sample)
-        vision_x = self.prepare_image(ice_img)
-        lang_x = self.prepare_text(ice_text)
-        # Check and log if the model is on the correct device
-        model_device = next(self.model.parameters()).device
-        logger.info(f"Model is on device: {model_device}")
+        _lang_x = torch.cat([ctx_input_ids], dim=1)
+        _attention_mask = torch.cat(
+            [
+                ctx_attention_mask,
+            ],
+            dim=1,
+        )
+        _vision_x = batch_images
+
         with torch.no_grad():
             outputs = self.model.generate(
-                vision_x=vision_x,
-                lang_x=lang_x["input_ids"],
-                attention_mask=lang_x["attention_mask"],
+                vision_x=_vision_x,
+                lang_x=_lang_x,
+                attention_mask=_attention_mask,
                 max_new_tokens=20,
                 min_new_tokens=1,
                 num_beams=1,
@@ -752,35 +890,101 @@ class FewShot:
                 return_dict_in_generate=True
             )
 
-        classnames_tokens = self.tokenizer(
-            self.all_class_names
-        )["input_ids"]
+        # Tokenize class names
+        classnames_tokens = self.tokenizer(self.all_class_names)["input_ids"]
 
-        predicted_classnames,predicted_logprobs,overall_log_probs = get_topk_classifications(outputs,classnames_tokens,self.topk)
-        # compute accuracy
-        y_i = sample.label
-
-        # Find the index of the ground truth label
-        gt_label_index = self.all_class_names.index(y_i)
-
-        # Get the confidence score of the ground truth label
-        gt_label_confidence = overall_log_probs[gt_label_index].item()
-
-        self.predictions.append(
-            {
-                "id": sample.idx,
-                "gt_label": y_i,
-                "pred_label": predicted_classnames[0],
-                "gt_id": sample.class_id,
-                "pred_score": predicted_logprobs[0],
-                "gt_score": gt_label_confidence,  
-                "prompt_text":ice_text,
-                "prompt_label":[dm.class_id for dm in demonstrations]
-            }
+        # Get top-k classifications for the batch
+        predicted_classnames_batch, predicted_logprobs_batch, overall_log_probs = get_topk_classifications_batch(
+            outputs,
+            classnames_tokens,
+            self.topk
         )
-        sample.pred_score = predicted_logprobs[0]
-        sample.pseudo_label = predicted_classnames[0]
-        sample.gt_score = gt_label_confidence 
+
+        # Process predictions for each sample
+        for idx, sample in enumerate(batch_samples):
+            y_i = sample.label
+            gt_label_index = self.all_class_names.index(y_i)
+            gt_label_confidence = overall_log_probs[idx, gt_label_index].item()
+
+            self.predictions.append(
+                {
+                    "id": sample.idx,
+                    "gt_label": y_i,
+                    "pred_label": predicted_classnames_batch[idx][0],
+                    "gt_id": sample.class_id,
+                    "pred_score": predicted_logprobs_batch[idx][0],
+                    "gt_score": gt_label_confidence,
+                    "prompt_text": batch_text[idx],
+                    "prompt_label": [dm.class_id for dm in demonstrations]
+                }
+            )
+            sample.pred_score = predicted_logprobs_batch[idx][0]
+            sample.pseudo_label = predicted_classnames_batch[idx][0]
+            sample.gt_score = gt_label_confidence
+        
+    def _prepare_images(self, batch: List[List[Image.Image]]) -> torch.Tensor:
+        """
+        Convert images to tensors, reshape them, and stack them.
+        Args:
+            batch: A list of lists of images.
+        Returns:
+            preprocessed images (tensors) or None
+                shape (B, T_img, F, C, H, W)
+                None if no images in batch
+        """
+        images_per_example = max(len(x) for x in batch)
+        batch_images = None
+        for iexample, example in enumerate(batch):
+            for iimage, image in enumerate(example):
+                preprocessed = self.image_processor(image)
+                if batch_images is None:
+                    batch_images = torch.zeros(
+                        (len(batch), images_per_example, 1) + preprocessed.shape,
+                        dtype=preprocessed.dtype,
+                    )
+                batch_images[iexample, iimage, 0] = preprocessed
+        if batch_images is not None:
+            batch_images = batch_images.to(self.device).half()
+        return batch_images
+
+    def _prepare_text(
+            self,
+            batch: List[List[str]],
+            padding="longest",
+            truncation=True,
+            max_length=2000,
+        ):
+            """
+            Tokenize the text and stack them.
+            Args:
+                batch: A list of lists of strings.
+            Returns:
+                input_ids (tensor)
+                    shape (B, T_txt)
+                attention_mask (tensor)
+                    shape (B, T_txt)
+            """
+            self.tokenizer.padding_side = "left"
+            encodings = self.tokenizer(
+                batch,
+                padding=padding,
+                truncation=truncation,
+                return_tensors="pt",
+                max_length=max_length,
+            )
+            input_ids, attention_mask = encodings["input_ids"], encodings["attention_mask"]
+            input_ids = input_ids.to(self.device)
+            attention_mask = attention_mask.to(self.device)
+            return input_ids, attention_mask
+
+    def inference_batch(self,batch_samples):
+        batch_samples = [self.preprocess_val(sample) for sample in batch_samples]
+        self.test_sample_num += len(batch_samples)
+        if self.args.model == "open_flamingo":
+            self.evaluate_batch_on_OFv2(batch_samples)
+        for sample in batch_samples:
+            if sample.pseudo_label == sample.label:
+                self.right_sample_num += 1
 
     def get_response_idefics(self,sample):
         demonstrations = self.retriever.get_demonstrations_from_bank(sample)
@@ -823,17 +1027,7 @@ class FewShot:
             }
         )
         sample.pseudo_label = predicted_classnames[0]
-        
-    def inference(self, sample):
-        sample = self.preprocess_val(sample)
-        self.test_sample_num += 1
-        if self.args.model == "open_flamingo":
-            self.get_response_OFv2(sample)
-        if self.args.model == "idefics":
-            self.get_response_idefics(sample)
-        if sample.pseudo_label == sample.label:
-            self.right_sample_num += 1
-
+    
     def preprocess_train(self, sample):
         idx = sample["id"]
         image = sample["image"]
@@ -859,7 +1053,8 @@ class FewShot:
             index_file="./imagenet_class_indices.pkl"  # 指定索引文件路径
         )
         test_dataset = ImageNetDataset(os.path.join("/data/hyh/imagenet/data", "val"))
-       
+        # 子集
+        validate_set = Subset(test_dataset, list(range(5000))) #取前5000个样本作为validate set
         # 设置全局随机种子
         random.seed(self.args.seed)
     
@@ -894,15 +1089,28 @@ class FewShot:
             support_sample = self.preprocess_train(support_set[idx])
             self.retriever.demonstrations.append(support_sample)
 
-        # 打乱 validate_set 的索引
-        shuffled_indices = list(range(len(test_dataset)))
+        # 测全集
+        # shuffled_indices = list(range(len(test_dataset)))
+        # validate_rng.shuffle(shuffled_indices)
+        # num_samples = len(shuffled_indices)
+
+        # 测子集
+        # 打乱验证集的索引
+        shuffled_indices = list(range(len(validate_set)))
         validate_rng.shuffle(shuffled_indices)
 
         self.test_sample_num = 0
         self.right_sample_num = 0
-        for idx in tqdm(shuffled_indices, desc="Inference ImageNet..."):
-            validate_sample = test_dataset[idx]
-            self.inference(validate_sample)
+        # for idx in tqdm(shuffled_indices, desc="Inference ImageNet..."):
+        #     validate_sample = test_dataset[idx]
+        #     self.inference(validate_sample)
+
+        batch_size = self.args.batch_size  
+
+        for i in tqdm(range(0, len(validate_set), batch_size), desc=f"Inference ImageNet..."):
+            batch_indices = shuffled_indices[i:i + batch_size]
+            batch_samples = [validate_set[idx] for idx in batch_indices]
+            self.inference_batch(batch_samples)
 
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc

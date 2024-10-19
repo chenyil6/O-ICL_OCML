@@ -26,7 +26,7 @@ class DynamicReteiever:
         if demonstrations is not None:
             for dm in demonstrations:
                 ice_img.append(dm.image)
-                ice_text += get_imagenet_prompt(dm.pseudo_label if dm.pseudo_label is not None else dm.label)
+                ice_text += get_imagenet_prompt(dm.label)
 
         ice_img.append(sample.image)
         ice_text += get_imagenet_prompt()
@@ -51,15 +51,15 @@ class DynamicReteiever:
     def get_topk_cosine(self, sample):
         demonstration_embeds = torch.stack([sample.embed for sample in self.demonstrations], dim=0)
         #logging.info(f"demonstration_embeds 的设备在: {demonstration_embeds.device}")
-        #device_set = "cuda:" + str(self.args.device)
-        #device = torch.device(device_set)
-        #demonstration_embeds = demonstration_embeds.to(device)
-        #sample_embed = sample.embed.to(device)
-        scores = torch.cosine_similarity(demonstration_embeds, sample.embed, dim=-1)
-        #scores = torch.cosine_similarity(demonstration_embeds, sample_embed, dim=-1)
+        device_set = "cuda:" + str(self.args.device)
+        device = torch.device(device_set)
+        demonstration_embeds = demonstration_embeds.to(device)
+        sample_embed = sample.embed.to(device)
+        #scores = torch.cosine_similarity(demonstration_embeds, sample.embed, dim=-1)
+        scores = torch.cosine_similarity(demonstration_embeds, sample_embed, dim=-1)
         values, indices = torch.topk(scores, self.dnum, largest=True)
-        #indices = indices.cpu().tolist()
-        indices = indices.tolist()
+        indices = indices.cpu().tolist()
+        #indices = indices.tolist()
         return indices
     
     def update(self):
@@ -197,45 +197,38 @@ class DynamicReteiever:
         return sample_list[least_similar_index], similarities[least_similar_index].item()
 
     def update_online(self,query_sample):
-        if self.args.dataset_mode == "balanced":
-            if self.args.update_strategy == "default_prototype":
-                self.update_based_on_default_prototype(query_sample)
-            elif self.args.update_strategy == "default_minmargin":
-                self.update_based_on_default_minmargin(query_sample)
-            elif self.args.update_strategy == "default_maxmargin":
-                self.update_based_on_default_maxmargin(query_sample)
-            elif self.args.update_strategy == "gradient_prototype":
-                self.update_based_on_gradient_and_prototype(query_sample)
-            elif self.args.update_strategy == "gradient_maxmargin":
-                self.update_based_on_gradient_and_maxmargin(query_sample)
-            elif self.args.update_strategy == "gradient_minmargin":
-                self.update_based_on_gradient_and_minmargin(query_sample)
-            elif self.args.update_strategy == "gradient_minmargin_topk":
-                self.update_based_on_gradient_and_minmargin_topk(query_sample)
-            elif self.args.update_strategy == "gradient_equal_1":
-                self.update_based_on_gradient_equal_1(query_sample)
-            elif self.args.update_strategy == "maxmargin_equal_1":
-                self.update_based_on_gradient_and_maxmargin_euqal_1(query_sample)
-            elif self.args.update_strategy == "gradient_prototype_equal_1":
-                self.update_based_on_gradient_and_prototype_equal_1(query_sample)
-            else:
-                print("update_strategy is not effective.")
-                return
+        if self.args.update_strategy == "default_prototype":
+            self.update_based_on_default_prototype(query_sample)
+        elif self.args.update_strategy == "default_minmargin":
+            self.update_based_on_default_minmargin(query_sample)
+        elif self.args.update_strategy == "default_maxmargin":
+            self.update_based_on_default_maxmargin(query_sample)
+        elif self.args.update_strategy == "gradient_prototype":
+            self.update_based_on_gradient_and_prototype(query_sample)
+        elif self.args.update_strategy == "gradient_maxmargin":
+            self.update_based_on_gradient_and_maxmargin(query_sample)
+        elif self.args.update_strategy == "gradient_minmargin":
+            self.update_based_on_gradient_and_minmargin(query_sample)
+        elif self.args.update_strategy == "gradient_minmargin_topk":
+            self.update_based_on_gradient_and_minmargin_topk(query_sample)
+        elif self.args.update_strategy == "gradient_equal_1":
+            self.update_based_on_gradient_equal_1(query_sample)
+        elif self.args.update_strategy == "maxmargin_equal_1":
+            self.update_based_on_gradient_and_maxmargin_euqal_1(query_sample)
+        elif self.args.update_strategy == "gradient_prototype_equal_1":
+            self.update_based_on_gradient_and_prototype_equal_1(query_sample)
         else:
-            if self.args.update_strategy == "balance_gradient_prototype":
-                self.update_based_on_balance_balance_gradient_prototype(query_sample)
-            else:
-                print("update_strategy is not effective.")
-                return
+            print("update_strategy is not effective.")
+            return
 
-    def compute_gradient(self, sample,alpha = 0.5,beta = 0.1,delta=0.4):
+    def compute_gradient(self, sample,alpha = 0.4,beta = 0.1,delta=0.5):
         error_rate = sum(self.error_history[sample.label]) / len(self.error_history[sample.label]) if len(self.error_history[sample.label]) > 0 else 0
 
         clip_similairity = (sample.quality+1)/2
 
         confidence = sample.gt_score
         # Support Gradient 公式
-        support_gradient = alpha * (1 - confidence) + beta *error_rate  + delta * clip_similairity
+        support_gradient = alpha * clip_similairity + beta * (1 - confidence) + delta * error_rate
 
         return support_gradient
 
@@ -315,8 +308,7 @@ class DynamicReteiever:
         margin = similarity_intra - avg_similarity_inter
         return margin
     
-    def update_based_on_gradient_and_prototype(self,query_sample): 
-        #  alpha = 0.5,beta = 0.1,delta=0.4 :63.22
+    def update_based_on_gradient_and_prototype(self,query_sample):  #  alpha = 0.4,beta = 0.5,delta=0.1 :63.22
         query_embed = query_sample.embed
         label = query_sample.label
         inference_result = 1 if query_sample.pseudo_label == label else 0

@@ -4,7 +4,7 @@ import logging
 from transformers import AutoTokenizer, CLIPModel,AutoProcessor
 import sys
 sys.path.append('/data/chy/online')
-from open_flamingo_4.open_flamingo.src.factory import create_model_and_transforms
+from open_flamingo_v2.open_flamingo.src.factory import create_model_and_transforms
 from transformers import IdeficsForVisionText2Text, AutoProcessor
 import json
 import logging
@@ -13,7 +13,7 @@ import logging
 logging.basicConfig(level=logging.INFO,  # 日志级别
                     format='%(asctime)s - %(levelname)s - %(message)s',  # 日志格式
                     handlers=[
-                        logging.FileHandler("program_log.log"),  # 输出到文件
+                        logging.FileHandler("try_batch.log"),  # 输出到文件
                         logging.StreamHandler()  # 输出到控制台
                     ])
 
@@ -36,8 +36,9 @@ def get_args():
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
-    parser.add_argument("--update_strategy", type=str, default="noUpdate") # noUpdate;prototype;default_margin;minmargin
+    parser.add_argument("--update_strategy", type=str, default="gradient_prototype") # noUpdate;prototype;gradient_prototype
     parser.add_argument("--M", type=int, default=1000)
+    parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--alpha", type=float, default=1.0)
     parser.add_argument("--beta", type=float, default=0)
     parser.add_argument("--delta", type=float, default=0)
@@ -115,26 +116,26 @@ if __name__ == "__main__":
         results = None
 
     results = {"device":args.device,"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
-               "update_strategy":args.update_strategy,"alpha": args.alpha,"beta": args.beta,"delta": args.delta,"results": results}
+               "batch_size":args.batch_size,"update_strategy":args.update_strategy,"alpha": args.alpha,"beta": args.beta,"delta": args.delta,"results": results}
     print("-------------------------final-results-----------------------")
     print(results)
     
     if args.method == "Online_ICL_Old": 
-        res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
+        res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}-batch_size={args.batch_size}"
                                                 f"-update_strategy={args.update_strategy}.json")
 
         
         with open(res_file_last, 'w') as json_file:
             json.dump(predictions, json_file, indent=4)
     elif args.method == "Online_ICL": 
-        res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
+        res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}-batch_size={args.batch_size}"
                                                 f"-update_strategy={args.update_strategy}-alpha={args.alpha}-beta={args.beta}-delta={args.delta}.json")
 
         
         with open(res_file_last, 'w') as json_file:
             json.dump(predictions, json_file, indent=4)
     else: # FewShot
-        res_file = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}"
+        res_file = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}-batch_size={args.batch_size}"
                                                 f"-update_strategy={args.update_strategy}.json")
 
         # load the prediction results to a json file

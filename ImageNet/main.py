@@ -21,7 +21,7 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="1")
+    parser.add_argument("--device", type=str, default="3")
     parser.add_argument(
         "--model",
         type=str,
@@ -32,7 +32,7 @@ def get_args():
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
     parser.add_argument("--dataset_mode", type=str, default="balanced") # balanced;imbalanced;
     parser.add_argument("--result_folder", type=str, default="./result")
-    parser.add_argument("--method", type=str, default="FewShot")# FewShot;Online_ICL;Online_ICL_Old
+    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL;Online_ICL_Old
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random

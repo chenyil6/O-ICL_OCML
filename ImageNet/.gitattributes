@@ -1,3 +1,0 @@
-ImageNet/train_idx2embed_quality.pkl filter=lfs diff=lfs merge=lfs -text
-ImageNet/val_idx2embed.pkl filter=lfs diff=lfs merge=lfs -text
-ImageNet/try_batch.log filter=lfs diff=lfs merge=lfs -text

@@ -1,4 +1,4 @@
-from open_flamingo_4.open_flamingo.src.factory import create_model_and_transforms
+from open_flamingo_v2.open_flamingo.src.factory import create_model_and_transforms
 import torch
 import sys
 sys.path.append('/data/chy/Online_ICL')

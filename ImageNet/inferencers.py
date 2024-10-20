@@ -373,9 +373,9 @@ class Online_ICL:
         self.predictions = []
         self.topk = 1
         self.features_data_train = {}
-        self.features_data__train_file = "./train_idx2embed_quality.pkl"
+        self.features_data__train_file = "/data/chy/feacture_cache/train_idx2embed_quality.pkl"
         self.features_data_val = {}
-        self.features_data__val_file = "./val_idx2embed.pkl"
+        self.features_data__val_file = "/data/chy/feacture_cache/val_idx2embed.pkl"
 
         if os.path.exists(self.features_data__train_file):
             with open(self.features_data__train_file, 'rb') as f:
@@ -807,8 +807,8 @@ class Online_ICL:
 
         self.test_sample_num = 0
         self.right_sample_num = 0
-        for i in tqdm(range(0, len(validate_set), batch_size), desc=f"Inference ImageNet..."):
-            batch_indices = shuffled_indices[i:i + batch_size]
+        for i in tqdm(range(0, len(validate_set), self.args.batch_size), desc=f"Inference ImageNet..."):
+            batch_indices = shuffled_indices[i:i + self.args.batch_size]
             batch_samples = [validate_set[idx] for idx in batch_indices]
             self.inference_batch(batch_samples)
 

@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def get_imagenet_prompt(label=None) -> str:
     return f"<image>Output:{label if label is not None else ''}{'<|endofchunk|>' if label is not None else ''}"
 
-def get_topk_classifications(outputs,classnames_tokens,topk):
+def get_topk_classifications(outputs,classnames_tokens,topk=2):
     overall_log_probs = torch.zeros(len(classnames_tokens))
     for idx,ct in enumerate(classnames_tokens):
         classname_tokens_num = len(ct)

@@ -430,7 +430,7 @@ class Online_ICL:
             self.all_class_names
         )["input_ids"]
 
-        predicted_classnames,predicted_logprobs,overall_log_probs = get_topk_classifications(outputs,classnames_tokens,self.topk)
+        predicted_classnames,predicted_logprobs,overall_log_probs = get_topk_classifications(outputs,classnames_tokens)
         # compute accuracy
         y_i = sample.label
 
@@ -440,6 +440,9 @@ class Online_ICL:
         # Get the confidence score of the ground truth label
         gt_label_confidence = overall_log_probs[gt_label_index].item()
 
+        # margin M:top1的预测概率-top2的预测概率，得到的是模型对预测的不准确性。M越小，就越不稳定
+        #margin = predicted_logprobs[0] -predicted_logprobs[1]
+
         self.predictions.append(
             {
                 "id": sample.idx,
@@ -447,7 +450,7 @@ class Online_ICL:
                 "pred_label": predicted_classnames[0],
                 "gt_id": sample.class_id,
                 "pred_score": predicted_logprobs[0],
-                "gt_score": gt_label_confidence,  
+                "gt_score": gt_label_confidence, 
                 "prompt_text":ice_text,
                 "prompt_label":[dm.class_id for dm in demonstrations]
             }
@@ -455,6 +458,7 @@ class Online_ICL:
         sample.pred_score = predicted_logprobs[0]
         sample.pseudo_label = predicted_classnames[0]
         sample.gt_score = gt_label_confidence 
+        #sample.margin = margin
 
     def get_response_idefics(self,sample):
         demonstrations = self.retriever.get_demonstrations_from_bank(sample)

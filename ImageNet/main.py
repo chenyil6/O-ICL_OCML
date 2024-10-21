@@ -39,9 +39,7 @@ def get_args():
     parser.add_argument("--update_strategy", type=str, default="gradient_prototype") # noUpdate;prototype;gradient_prototype
     parser.add_argument("--M", type=int, default=1000)
     parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--alpha", type=float, default=1.0)
-    parser.add_argument("--beta", type=float, default=0)
-    parser.add_argument("--delta", type=float, default=0)
+    parser.add_argument("--alpha", type=float, default=0.1)
     arguments = parser.parse_args()
     return arguments
 
@@ -116,7 +114,7 @@ if __name__ == "__main__":
         results = None
 
     results = {"device":args.device,"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
-               "batch_size":args.batch_size,"update_strategy":args.update_strategy,"alpha": args.alpha,"beta": args.beta,"delta": args.delta,"results": results}
+               "batch_size":args.batch_size,"update_strategy":args.update_strategy,"alpha": args.alpha,"results": results}
     print("-------------------------final-results-----------------------")
     print(results)
     
@@ -129,7 +127,7 @@ if __name__ == "__main__":
             json.dump(predictions, json_file, indent=4)
     elif args.method == "Online_ICL": 
         res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}-batch_size={args.batch_size}"
-                                                f"-update_strategy={args.update_strategy}-alpha={args.alpha}-beta={args.beta}-delta={args.delta}.json")
+                                                f"-update_strategy={args.update_strategy}-alpha={args.alpha}.json")
 
         
         with open(res_file_last, 'w') as json_file:

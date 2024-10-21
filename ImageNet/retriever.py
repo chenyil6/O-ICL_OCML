@@ -221,14 +221,15 @@ class DynamicReteiever:
             print("update_strategy is not effective.")
             return
 
-    def compute_gradient(self, sample,alpha = 0.4,beta = 0.1,delta=0.5):
+    def compute_gradient(self, sample,alpha = 0.4):
         error_rate = sum(self.error_history[sample.label]) / len(self.error_history[sample.label]) if len(self.error_history[sample.label]) > 0 else 0
 
         clip_similairity = (sample.quality+1)/2
 
-        confidence = sample.gt_score
+        #confidence = sample.gt_score
+        #margin = sample.margin
         # Support Gradient 公式
-        support_gradient = alpha * clip_similairity + beta * (1 - confidence) + delta * error_rate
+        support_gradient = alpha * clip_similairity + (1-alpha) * error_rate
 
         return support_gradient
 
@@ -315,7 +316,7 @@ class DynamicReteiever:
         # 更新该类别的推理历史记录
         self.error_history[label].append(1 - inference_result)  # 记录错误推理
         # 计算 Support Gradient
-        support_gradient = self.compute_gradient(query_sample,self.args.alpha,self.args.beta,self.args.delta)
+        support_gradient = self.compute_gradient(query_sample,self.args.alpha)
         self.support_gradient_list.append(support_gradient)
         
         # 获取当前类别的样本列表

@@ -1,0 +1,3 @@
+nohup: ignoring input
+Running with alpha=0.6
+2024-10-21 20:20:04,066 - INFO - Loading pretrained ViT-L-14 from OpenAI.

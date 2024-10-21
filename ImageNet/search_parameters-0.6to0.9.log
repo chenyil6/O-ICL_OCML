@@ -1,3 +1,14 @@
 nohup: ignoring input
 Running with alpha=0.6
 2024-10-21 20:20:04,066 - INFO - Loading pretrained ViT-L-14 from OpenAI.
+You are using config.init_device='cpu', but you can also use config.init_device="meta" with Composer + FSDP for fast initialization.
+run_parameter.sh: line 4: 42455 Terminated              python -u main.py --device "2" --M "1000" --alpha "${alpha}"
+Running with alpha=0.7
+2024-10-21 20:28:46,054 - INFO - Loading pretrained ViT-L-14 from OpenAI.
+run_parameter.sh: line 4:   372 Terminated              python -u main.py --device "2" --M "1000" --alpha "${alpha}"
+Running with alpha=0.8
+2024-10-21 20:30:12,793 - INFO - Loading pretrained ViT-L-14 from OpenAI.
+run_parameter.sh: line 4:  2186 Terminated              python -u main.py --device "2" --M "1000" --alpha "${alpha}"
+Running with alpha=0.9
+2024-10-21 20:31:22,217 - INFO - Loading pretrained ViT-L-14 from OpenAI.
+run_parameter.sh: line 4:  4294 Terminated              python -u main.py --device "2" --M "1000" --alpha "${alpha}"

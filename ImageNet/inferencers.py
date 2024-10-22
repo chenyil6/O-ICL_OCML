@@ -805,9 +805,9 @@ class Online_ICL:
         #self.visualize_tsne("Updated Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-updated_memory_bank-alpha={self.args.alpha}.jpg")
         print("Inference using the latest supporting set...")
 
-        file_path = f'./{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}.json'  # 确保 self.args.update_strategy 有效
-        with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
-            json.dump(self.retriever.support_gradient_list, json_file, indent=4)
+        #file_path = f'./{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}.json'  # 确保 self.args.update_strategy 有效
+        #with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
+            #json.dump(self.retriever.support_gradient_list, json_file, indent=4)
 
         self.test_sample_num = 0
         self.right_sample_num = 0

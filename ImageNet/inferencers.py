@@ -790,7 +790,7 @@ class Online_ICL:
         #     sample = self.preprocess_train(sample)
         #     self.inference(sample)
         #     del sample
-        
+        sample_pool = sample_pool[0:10]
         total_samples = len(sample_pool)  # 获取样本池的初始大小
         pbar = tqdm(total=total_samples, desc="Inferencing sample pool while updating the support set")
 
@@ -805,7 +805,7 @@ class Online_ICL:
         #self.visualize_tsne("Updated Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-updated_memory_bank-alpha={self.args.alpha}-beta={self.args.beta}-delta={self.args.delta}.jpg")
         print("Inference using the latest supporting set...")
 
-        file_path = f'./{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}-beta={self.args.beta}-delta={self.args.delta}.json'  # 确保 self.args.update_strategy 有效
+        file_path = f'./{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}.json'  # 确保 self.args.update_strategy 有效
         with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
             json.dump(self.retriever.support_gradient_list, json_file, indent=4)
 

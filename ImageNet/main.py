@@ -39,8 +39,8 @@ def get_args():
     parser.add_argument("--update_strategy", type=str, default="gradient_prototype") # noUpdate;prototype;gradient_prototype
     parser.add_argument("--M", type=int, default=1000)
     parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--alpha", type=float, default=0.1)
-    parser.add_argument("--beta", type=float, default=0)
+    parser.add_argument("--alpha", type=float, default=0.4)
+    parser.add_argument("--beta", type=float, default=0.5)
     parser.add_argument("--delta", type=float, default=0.1)
     arguments = parser.parse_args()
     return arguments

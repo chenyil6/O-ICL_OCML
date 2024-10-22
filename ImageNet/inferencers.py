@@ -790,7 +790,7 @@ class Online_ICL:
         #     sample = self.preprocess_train(sample)
         #     self.inference(sample)
         #     del sample
-
+        sample_pool = sample_pool[0:10]
         total_samples = len(sample_pool)  # 获取样本池的初始大小
         pbar = tqdm(total=total_samples, desc="Inferencing sample pool while updating the support set")
 
@@ -815,6 +815,7 @@ class Online_ICL:
             batch_indices = shuffled_indices[i:i + self.args.batch_size]
             batch_samples = [validate_set[idx] for idx in batch_indices]
             self.inference_batch(batch_samples)
+            break
 
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc

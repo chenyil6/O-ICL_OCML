@@ -67,9 +67,8 @@ for class_id in range(1000):
 
 print(f"the len of use_train_data(support set + data stream) is {len(use_train_data)}")
 
-# 预处理支持集
-while use_train_data:
-    sample = use_train_data.pop(0)
+# 预处理支持集，加上进度条
+for sample in tqdm(use_train_data, desc="Processing train dataset"):
     preprocess_train(sample)
 
 with open('./train_idx2embed_quality.pkl', 'wb') as f:
@@ -78,6 +77,7 @@ with open('./train_idx2embed_quality.pkl', 'wb') as f:
 print("train data features are stored...")
 
 test_dataset = ImageNetDataset(os.path.join("/data/hyh/imagenet/data", "val"))
+
 print(f"the len of test_data is {len(test_dataset)}")
 
 features_data_val = {}

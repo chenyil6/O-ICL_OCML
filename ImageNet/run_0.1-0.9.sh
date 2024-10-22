@@ -1,8 +1,10 @@
 #!/bin/bash
 
-# 遍历 alpha 从 0.1 到 0.9，每次递增 0.1
+beta=0
+
 for alpha in $(seq 0.1 0.1 0.9)
 do
-    echo "Running with alpha=${alpha}"
-    python -u main.py --device "3" --M "1000" --alpha "${alpha}"
+    delta=$(echo "1 - ${alpha}" | bc)
+    echo "Running with alpha=${alpha} beta=${beta} delta=${delta}"
+    python -u main.py --device "3" --M "1000" --alpha "${alpha}" --beta "${beta}" --delta "${delta}"
 done

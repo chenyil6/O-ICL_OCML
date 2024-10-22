@@ -31,6 +31,7 @@ class Sample:
     pseudo_label: Optional[str]
     pred_score: Optional[float]
     gt_score:Optional[float]
+    margin:Optional[float]
 
 class Online_ICL_Old:
     """
@@ -441,7 +442,7 @@ class Online_ICL:
         gt_label_confidence = overall_log_probs[gt_label_index].item()
 
         # margin M:top1的预测概率-top2的预测概率，得到的是模型对预测的不准确性。M越小，就越不稳定
-        #margin = predicted_logprobs[0] -predicted_logprobs[1]
+        margin = predicted_logprobs[0] -predicted_logprobs[1]
 
         self.predictions.append(
             {
@@ -451,6 +452,7 @@ class Online_ICL:
                 "gt_id": sample.class_id,
                 "pred_score": predicted_logprobs[0],
                 "gt_score": gt_label_confidence, 
+                "margin":margin,
                 "prompt_text":ice_text,
                 "prompt_label":[dm.class_id for dm in demonstrations]
             }
@@ -458,7 +460,7 @@ class Online_ICL:
         sample.pred_score = predicted_logprobs[0]
         sample.pseudo_label = predicted_classnames[0]
         sample.gt_score = gt_label_confidence 
-        #sample.margin = margin
+        sample.margin = margin
 
     def get_response_idefics(self,sample):
         demonstrations = self.retriever.get_demonstrations_from_bank(sample)
@@ -647,7 +649,7 @@ class Online_ICL:
         label = sample["class_name"]
         class_id = sample["class_id"]
         embed, quality = self.features_data_train[idx]
-        sample = Sample(idx, image, label, embed,quality,class_id, None,None,None)
+        sample = Sample(idx, image, label, embed,quality,class_id, None,None,None,None)
         return sample
     
     def preprocess_val(self, sample):
@@ -659,7 +661,7 @@ class Online_ICL:
         # label_embed = self.get_text_embedding(label).squeeze().cpu()
         # quality = torch.cosine_similarity(embed.unsqueeze(0), label_embed.unsqueeze(0), dim=1).item()
         embed = self.features_data_val[idx]
-        sample = Sample(idx, image, label, embed,None,class_id, None,None,None)
+        sample = Sample(idx, image, label, embed,None,class_id, None,None,None,None)
         return sample
     
     def process_dict(self,sample):

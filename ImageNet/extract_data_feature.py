@@ -86,7 +86,12 @@ def preprocess_val(sample):
     image = sample["image"]
     label = sample["class_name"]
     image_embed = get_embedding(image).squeeze().cpu()
-    features_data_val[idx] = image_embed
+
+    label_embed = get_text_embedding(label).squeeze().cpu()
+
+    quality = torch.cosine_similarity(image_embed.unsqueeze(0), label_embed.unsqueeze(0), dim=1).item()
+
+    features_data_val[idx] = [image_embed, quality]
 
 for data in tqdm(test_dataset, desc="Processing test dataset"):
     preprocess_val(data)

@@ -792,7 +792,7 @@ class Online_ICL:
         #     sample = self.preprocess_train(sample)
         #     self.inference(sample)
         #     del sample
-        sample_pool = sample_pool[0:10]
+        #sample_pool = sample_pool[0:10]
         total_samples = len(sample_pool)  # 获取样本池的初始大小
         pbar = tqdm(total=total_samples, desc="Inferencing sample pool while updating the support set")
 
@@ -817,7 +817,6 @@ class Online_ICL:
             batch_indices = shuffled_indices[i:i + self.args.batch_size]
             batch_samples = [validate_set[idx] for idx in batch_indices]
             self.inference_batch(batch_samples)
-            break
 
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc
@@ -847,9 +846,9 @@ class FewShot:
         self.predictions = []
         self.topk = 1       
         self.features_data_train = {}
-        self.features_data__train_file = "./train_idx2embed_quality.pkl"
+        self.features_data__train_file = "/data/chy/feacture_cache/train_idx2embed_quality.pkl"
         self.features_data_val = {}
-        self.features_data__val_file = "./val_idx2embed.pkl"
+        self.features_data__val_file = "/data/chy/feacture_cache/val_idx2embed.pkl"
 
         if os.path.exists(self.features_data__train_file):
             with open(self.features_data__train_file, 'rb') as f:
@@ -1041,7 +1040,7 @@ class FewShot:
         label = sample["class_name"]
         class_id = sample["class_id"]
         embed, quality = self.features_data_train[idx]
-        sample = Sample(idx, image, label, embed,quality,class_id, None,None,None)
+        sample = Sample(idx, image, label, embed,quality,class_id, None,None,None,None)
         return sample
     
     def preprocess_val(self, sample):
@@ -1050,7 +1049,7 @@ class FewShot:
         label = sample["class_name"]
         class_id = sample["class_id"]
         embed= self.features_data_val[idx]
-        sample = Sample(idx, image, label, embed,None,class_id, None,None,None)
+        sample = Sample(idx, image, label, embed,None,class_id, None,None,None,None)
         return sample
     
     def run(self):
@@ -1070,13 +1069,13 @@ class FewShot:
         class_selection_rng = random.Random(self.args.seed + 3)
         # 从train_dataset中取support set
         support_set = []
-        sample_pool=[]
+        #sample_pool=[]
         print("get supportng set ...")
         if self.args.dataset_mode == "balanced":
             for class_id in tqdm(range(len(self.all_class_names)),desc="get samples for each class"):
                 data_list = train_dataset.get_data_list_by_class(class_id=class_id)
                 support_set.extend(data_list[0:10])
-                sample_pool.extend(data_list[50:150])
+                support_set.extend(data_list[50:150])
         else: # imbalanced
             num_classes = len(self.all_class_names)
             no_sample_classes = class_selection_rng.sample(range(num_classes), num_classes // 2)

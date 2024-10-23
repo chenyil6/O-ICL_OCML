@@ -86,17 +86,12 @@ def preprocess_val(sample):
     image = sample["image"]
     label = sample["class_name"]
     image_embed = get_embedding(image).squeeze().cpu()
-
-    label_embed = get_text_embedding(label).squeeze().cpu()
-
-    quality = torch.cosine_similarity(image_embed.unsqueeze(0), label_embed.unsqueeze(0), dim=1).item()
-
-    features_data_val[idx] = [image_embed, quality]
+    features_data_val[idx] = image_embed
 
 for data in tqdm(test_dataset, desc="Processing test dataset"):
     preprocess_val(data)
 
-with open('./val_idx2embed_quality.pkl', 'wb') as f:
+with open('./val_idx2embed.pkl', 'wb') as f:
     pickle.dump(features_data_val, f)
 
 print("val data features are stored...")

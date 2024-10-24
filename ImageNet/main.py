@@ -21,7 +21,7 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="0")
+    parser.add_argument("--device", type=str, default="3")
     parser.add_argument(
         "--model",
         type=str,
@@ -36,11 +36,11 @@ def get_args():
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
-    parser.add_argument("--update_strategy", type=str, default="gradient_prototype") # noUpdate;prototype;gradient_prototype
+    parser.add_argument("--update_strategy", type=str, default="prototype_feedback") # noUpdate;prototype;gradient_prototype;fixed_gradient
     parser.add_argument("--M", type=int, default=1000)
     parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--alpha", type=float, default=0.4)
-    parser.add_argument("--beta", type=float, default=0.1)
+    parser.add_argument("--alpha", type=float, default=0.5)
+    parser.add_argument("--beta", type=float, default=0)
     parser.add_argument("--delta", type=float, default=0.5)
     arguments = parser.parse_args()
     return arguments

@@ -807,13 +807,13 @@ class Online_ICL:
         #self.visualize_tsne("Updated Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-updated_memory_bank-alpha={self.args.alpha}.jpg")
         print("Inference using the latest supporting set...")
 
-        file_path = f'./error_rate_{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}.json'  # 确保 self.args.update_strategy 有效
-        with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
-            json.dump(self.retriever.error_rate, json_file, indent=4)
+        # file_path = f'./error_rate_{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}.json'  # 确保 self.args.update_strategy 有效
+        # with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
+        #     json.dump(self.retriever.error_rate, json_file, indent=4)
 
-        #file_path = f'./{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}.json'  # 确保 self.args.update_strategy 有效
-        #with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
-            #json.dump(self.retriever.support_gradient_list, json_file, indent=4)
+        # file_path = f'./{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}-btea={self.args.beta}-delta={self.args.delta}.json'  # 确保 self.args.update_strategy 有效
+        # with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
+        #     json.dump(self.retriever.support_gradient_list, json_file, indent=4)
 
         self.test_sample_num = 0
         self.right_sample_num = 0
@@ -1037,6 +1037,50 @@ class FewShot:
             }
         )
         sample.pseudo_label = predicted_classnames[0]
+    
+    def get_response_idefics_batch(self,batch_samples):
+        prompts = []
+        for sample in batch_samples:
+            demonstrations = self.retriever.get_demonstrations_from_bank(sample)
+            prompt = []
+            if demonstrations is not None:
+                for dm in demonstrations:
+                    prompt.append(dm.image)
+                    prompt.append(f"Output:{dm.pseudo_label}"+"\n")
+            prompt.append(sample.image)
+            prompt.append(f"Output:")
+            prompts.append(prompt)
+
+        inputs = self.processor(prompts, return_tensors="pt").to(self.device)
+        bad_words_ids = self.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
+
+        with torch.no_grad():
+            outputs = self.model.generate(**inputs,
+                                        max_new_tokens=20,
+                                        bad_words_ids=bad_words_ids,
+                                        output_scores=True,
+                                        return_dict_in_generate=True)
+
+        classnames_tokens = self.tokenizer(self.all_class_names)["input_ids"]
+
+        for i, sample in enumerate(batch_samples):
+            predicted_classnames, predicted_logprobs, average_log_prob = get_topk_classifications(outputs[i],
+                                                                                                classnames_tokens,
+                                                                                                self.topk)
+            # compute accuracy
+            y_i = sample.label
+            relative_score = torch.exp(torch.tensor(predicted_logprobs[0] - average_log_prob)).item()
+            self.predictions.append(
+                {
+                    "id": sample.idx,
+                    "gt_label": y_i,
+                    "pred_label": predicted_classnames[0],
+                    "gt_id": sample.class_id,
+                    "pred_score": relative_score,
+                    "prompt": prompts[i]
+                }
+            )
+            sample.pseudo_label = predicted_classnames[0]
     
     def preprocess_train(self, sample):
         idx = sample["id"]

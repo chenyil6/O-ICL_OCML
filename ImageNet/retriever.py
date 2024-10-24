@@ -7,6 +7,7 @@ import numpy as np
 import time
 from collections import defaultdict, deque
 import logging
+import math
 logger = logging.getLogger(__name__)
 
 class DynamicReteiever:
@@ -20,6 +21,7 @@ class DynamicReteiever:
         self.support_gradient_list = []
         # error_rate 是一个类 ID 到 error rate list 的映射
         self.error_rate = {}
+        self.class_gradients = defaultdict(list)
     
     def get_final_query(self, sample):
         demonstrations = self.get_demonstrations_from_bank(sample)
@@ -161,6 +163,8 @@ class DynamicReteiever:
             self.update_based_on_gradient_and_prototype(query_sample)
         elif self.args.update_strategy == "prototype_feedback":
             self.update_based_on_prototype_feedback(query_sample)
+        elif self.args.update_strategy == "cosine_gradient":
+            self.update_based_on_cosine_and_gradient(query_sample)
         elif self.args.update_strategy == "gradient_equal_1":
             self.update_based_on_gradient_equal_1(query_sample)
         elif self.args.update_strategy == "maxmargin_equal_1":
@@ -183,6 +187,7 @@ class DynamicReteiever:
 
         margin = sample.margin
         support_gradient = alpha * clip_similairity + beta * margin+ delta * error_rate
+        self.class_gradients[sample.label].append(support_gradient)
 
         return support_gradient
 
@@ -211,8 +216,8 @@ class DynamicReteiever:
         self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
             
         assert len(self.demonstrations) == self.args.M
-
-    def update_based_on_prototype_feedback(self,query_sample): 
+    
+    def update_based_on_cosine_and_gradient(self,query_sample):  #  alpha = 0.4,beta = 0.5,delta=0.1 :63.22
         query_embed = query_sample.embed
         label = query_sample.label
         inference_result = 1 if query_sample.pseudo_label == label else 0
@@ -227,18 +232,21 @@ class DynamicReteiever:
         # 获取当前类别的原型向量
         current_prototype = self.label_to_prototype[label]
 
-        if inference_result == 1:  # 如果预测正确
-            # 找到当前类别中最不相似的样本（与原型相距最远的样本）
-            similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
-            least_similar_index = torch.argmin(similarities).item()
-            target_sample = sample_list[least_similar_index]
-        else:  # 如果预测错误
-            # 找到当前类别中最不相似的样本（与错误类别原型相距最近的样本）
-            similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), self.label_to_prototype[query_sample.pseudo_label].unsqueeze(0))
-            selected_index = torch.argmax(similarities).item()
-            target_sample = sample_list[selected_index]
+        # 找到当前类别中最不相似的样本（与原型相距最远的样本）
+        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
+        least_similar_index = torch.argmin(similarities).item()
 
-        target_sample.embed = (1 - support_gradient) * target_sample.embed + support_gradient * query_embed
+        target_sample = sample_list[least_similar_index]
+
+        # 计算余弦退火更新幅度
+        alpha_0 = 1  # 初始学习率
+        # 使用余弦退火公式计算当前学习率
+        alpha_t = alpha_0 * 0.5 * (1 + math.cos(self.timestep * math.pi / 10000))
+        
+        # 结合支持梯度和余弦退火的更新
+        # 更新目标样本的嵌入向量，考虑支持梯度
+        target_sample.embed = (1 - alpha_t) * target_sample.embed + alpha_t * (query_embed + support_gradient)
+
         # 更新类别原型
         self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
             

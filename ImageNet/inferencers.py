@@ -731,8 +731,13 @@ class Online_ICL:
             index_file="./imagenet_class_indices.pkl"  # 指定索引文件路径
         )
         test_dataset = ImageNetDataset(os.path.join("/data/hyh/imagenet/data", "val"))
-        # 子集
-        validate_set = Subset(test_dataset, list(range(5000))) #取前5000个样本作为validate set
+
+        if self.args.catergory_num == 100: # 测100类
+            test_dataset = Subset(test_dataset, list(range(5000))) #取前5000个样本作为validate set
+            self.all_class_names == IMAGENET_CLASSNAMES_100
+        else:
+            self.all_class_names == IMAGENET_CLASSNAMES
+
         # 设置全局随机种子
         random.seed(self.args.seed)
     
@@ -743,6 +748,7 @@ class Online_ICL:
         # 从train_dataset中取support set
         support_set = []
         sample_pool = []
+
         print("get memory bank and sample pool ...")
         if self.args.dataset_mode == "balanced":
             for class_id in tqdm(range(len(self.all_class_names)),desc="get samples for each class"):
@@ -778,19 +784,15 @@ class Online_ICL:
         print(f"Get the value of every sample in support set")
         sample_pool_rng.shuffle(sample_pool)  # 使用单独的 random 对象打乱 sample_pool
 
-        # 测子集
-        shuffled_indices = list(range(len(validate_set)))
+        shuffled_indices = list(range(len(test_dataset)))
         validate_rng.shuffle(shuffled_indices)
-
-        # 测全集
-        # shuffled_indices = list(range(len(test_dataset)))
-        # validate_rng.shuffle(shuffled_indices)
 
         # 使用数据流更新 support set
         total_samples = len(sample_pool)  # 获取样本池的初始大小
-        pbar = tqdm(total=total_samples, desc="Using sample pool while updating the support set")
+        pbar = tqdm(total=total_samples, desc="Using sample pool to update the support set")
         while sample_pool:  # 当 sample_pool 不为空时继续循环
             sample = sample_pool.pop()
+            sample = self.preprocess_train(sample)
             self.retriever.update_online(sample)
             del sample
             pbar.update(1)  # 每处理一个样本，更新进度条
@@ -802,17 +804,11 @@ class Online_ICL:
 
         self.test_sample_num = 0
         self.right_sample_num = 0
-        # 测子集
-        for i in tqdm(range(0, len(validate_set), self.args.batch_size), desc=f"Inference ImageNet..."):
-            batch_indices = shuffled_indices[i:i + self.args.batch_size]
-            batch_samples = [validate_set[idx] for idx in batch_indices]
-            self.inference_batch(batch_samples)
 
-        # 测全集
-        # for i in tqdm(range(0, len(test_dataset), self.args.batch_size), desc=f"Inference ImageNet..."):
-        #     batch_indices = shuffled_indices[i:i + self.args.batch_size]
-        #     batch_samples = [test_dataset[idx] for idx in batch_indices]
-        #     self.inference_batch(batch_samples)
+        for i in tqdm(range(0, len(test_dataset), self.args.batch_size), desc=f"Inference ImageNet..."):
+            batch_indices = shuffled_indices[i:i + self.args.batch_size]
+            batch_samples = [test_dataset[idx] for idx in batch_indices]
+            self.inference_batch(batch_samples)
 
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc
@@ -1032,7 +1028,7 @@ class FewShot:
         )
         sample.pseudo_label = predicted_classnames[0]
     
-    def evaluate_batch_on_idev2(self,batch_samples):
+    def evaluate_batch_on_idev1(self,batch_samples):
         prompts = []
         for sample in batch_samples:
             demonstrations = self.retriever.get_demonstrations_from_bank(sample)

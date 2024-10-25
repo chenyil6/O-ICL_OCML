@@ -22,6 +22,7 @@ class DynamicReteiever:
         # error_rate 是一个类 ID 到 error rate list 的映射
         self.error_rate = {}
         self.class_gradients = defaultdict(list)
+        self.timestep = 0
     
     def get_final_query(self, sample):
         demonstrations = self.get_demonstrations_from_bank(sample)
@@ -161,19 +162,27 @@ class DynamicReteiever:
     def update_online(self,query_sample):
         if self.args.update_strategy == "gradient_prototype":
             self.update_based_on_gradient_and_prototype(query_sample)
-        elif self.args.update_strategy == "prototype_feedback":
-            self.update_based_on_prototype_feedback(query_sample)
-        elif self.args.update_strategy == "cosine_gradient":
-            self.update_based_on_cosine_and_gradient(query_sample)
-        elif self.args.update_strategy == "gradient_equal_1":
-            self.update_based_on_gradient_equal_1(query_sample)
-        elif self.args.update_strategy == "maxmargin_equal_1":
-            self.update_based_on_gradient_and_maxmargin_euqal_1(query_sample)
+        elif self.args.update_strategy == "gradient_prototype":
+            self.update_based_on_gradient_and_prototype(query_sample)
+        elif self.args.update_strategy == "time_decay":
+            self.update_prototype_with_time_decay(query_sample)
         elif self.args.update_strategy == "fixed_gradient":
-            self.update_based_on_gradient_and_prototype_equal_fixed_gradient(query_sample)
+            self.update_based_on_gradient_and_prototype_equal_fixed_gradient(query_sample,gradient =self.args.gradient)
         else:
             print("update_strategy is not effective.")
             return
+
+    def adjust_learning_rate(self, base_lr, timestep):
+        """
+        根据时间步衰减调整学习率
+        base_lr: 初始学习率
+        timestep: 当前时间步
+        """
+        # 定义衰减因子 beta，可以在 args 中设置
+        decay_factor = self.args.decay
+        # 计算时间步衰减后的学习率
+        adjusted_lr = base_lr / (1 + decay_factor * timestep)
+        return adjusted_lr
 
     def compute_gradient(self, sample,alpha = 0,beta = 1.0,delta=0):
         error_rate = sum(self.error_history[sample.label]) / len(self.error_history[sample.label]) if len(self.error_history[sample.label]) > 0 else 0
@@ -252,9 +261,11 @@ class DynamicReteiever:
             
         assert len(self.demonstrations) == self.args.M
 
-    def update_based_on_gradient_and_prototype_equal_fixed_gradient(self,query_sample): 
-        # gradient = 1,acc = 58.66
-        # gradient = 0.5 ,acc = 
+    def update_prototype_with_time_decay(self, query_sample): 
+        """
+        基于时间步衰减和原型反馈更新样本嵌入向量
+        """
+        # 获取 query 的嵌入向量和标签
         query_embed = query_sample.embed
         label = query_sample.label
         inference_result = 1 if query_sample.pseudo_label == label else 0
@@ -262,8 +273,37 @@ class DynamicReteiever:
         self.error_history[label].append(1 - inference_result)  # 记录错误推理
 
         # 计算 Support Gradient
-        support_gradient = 0.2
+        support_gradient = self.compute_gradient(query_sample, self.args.alpha, self.args.beta, self.args.delta)
         self.support_gradient_list.append(support_gradient)
+
+        # 动态调整学习率（根据时间步）
+        base_lr = support_gradient  # 使用计算的 gradient 作为 base_lr
+        current_lr = self.adjust_learning_rate(base_lr, self.timestep)
+
+        # 获取当前类别的样本列表
+        sample_list = self.label2sample[label]
+        # 获取当前类别的原型向量
+        current_prototype = self.label_to_prototype[label]
+
+        # 计算与原型的相似度，找到最不相似的样本
+        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
+        least_similar_index = torch.argmin(similarities).item()
+        target_sample = sample_list[least_similar_index]
+
+        # 更新目标样本的嵌入向量，使用当前学习率
+        target_sample.embed = (1 - current_lr) * target_sample.embed + current_lr * query_embed
+
+        # 更新类别原型
+        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+
+        # 更新时间步
+        self.timestep += 1
+    
+    def update_based_on_gradient_and_prototype_equal_fixed_gradient(self,query_sample,gradient): 
+        query_embed = query_sample.embed
+        label = query_sample.label
+        # 计算 Support Gradient
+        support_gradient = gradient
         
         # 获取当前类别的样本列表
         sample_list = self.label2sample[label]
@@ -275,28 +315,6 @@ class DynamicReteiever:
         least_similar_index = torch.argmin(similarities).item()
 
         least_similar_sample = sample_list[least_similar_index]
-        least_similar_sample.embed = (1 - support_gradient) * least_similar_sample.embed + support_gradient * query_embed
-        # 更新类别原型
-        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
-            
-        assert len(self.demonstrations) == self.args.M
-
-    def update_based_on_gradient_equal_1(self,query_sample):  # 52.5
-        query_embed = query_sample.embed
-        label = query_sample.label
-        # 计算 Support Gradient
-        support_gradient = 1
-        
-        # 获取当前类别的样本列表
-        sample_list = self.label2sample[label]
-
-        # 计算支持集中每个样本的 margin
-        margins = [self.compute_minMargin(s.embed, label) for s in sample_list]
-
-        # 找到 margin 最小的样本
-        min_margin_index = torch.argmin(torch.tensor(margins)).item()
-
-        least_similar_sample = sample_list[min_margin_index]
         least_similar_sample.embed = (1 - support_gradient) * least_similar_sample.embed + support_gradient * query_embed
         # 更新类别原型
         self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)

@@ -1,3 +1,0 @@
-nohup: ignoring input
-2024-10-24 21:40:39,634 - INFO - Loading pretrained ViT-L-14 from OpenAI.
-You are using config.init_device='cpu', but you can also use config.init_device="meta" with Composer + FSDP for fast initialization.

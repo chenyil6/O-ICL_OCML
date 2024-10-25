@@ -1,0 +1,122 @@
+[
+    {
+        "id": 1383,
+        "gt_label": "newt",
+        "pred_label": "tree frog",
+        "gt_id": 27,
+        "pred_score": 0.7750435471534729,
+        "gt_score": 0.004204361233860254,
+        "prompt_text": "<image>Output:American bullfrog<|endofchunk|><image>Output:tree frog<|endofchunk|><image>Output:tree frog<|endofchunk|><image>Output:tree frog<|endofchunk|><image>Output:",
+        "prompt_label": [
+            7,
+            7,
+            8,
+            7
+        ]
+    },
+    {
+        "id": 1881,
+        "gt_label": "box turtle",
+        "pred_label": "box turtle",
+        "gt_id": 37,
+        "pred_score": 0.5328486561775208,
+        "gt_score": 0.5328486561775208,
+        "prompt_text": "<image>Output:terrapin<|endofchunk|><image>Output:mud turtle<|endofchunk|><image>Output:box turtle<|endofchunk|><image>Output:box turtle<|endofchunk|><image>Output:",
+        "prompt_label": [
+            7,
+            7,
+            8,
+            7
+        ]
+    },
+    {
+        "id": 4901,
+        "gt_label": "red-breasted merganser",
+        "pred_label": "red-breasted merganser",
+        "gt_id": 98,
+        "pred_score": 0.9605517387390137,
+        "gt_score": 0.9605517387390137,
+        "prompt_text": "<image>Output:red-breasted merganser<|endofchunk|><image>Output:red-breasted merganser<|endofchunk|><image>Output:red-breasted merganser<|endofchunk|><image>Output:red-breasted merganser<|endofchunk|><image>Output:",
+        "prompt_label": [
+            7,
+            7,
+            8,
+            7
+        ]
+    },
+    {
+        "id": 1524,
+        "gt_label": "American bullfrog",
+        "pred_label": "American bullfrog",
+        "gt_id": 30,
+        "pred_score": 0.9591675400733948,
+        "gt_score": 0.9591675400733948,
+        "prompt_text": "<image>Output:American bullfrog<|endofchunk|><image>Output:American bullfrog<|endofchunk|><image>Output:American bullfrog<|endofchunk|><image>Output:American bullfrog<|endofchunk|><image>Output:",
+        "prompt_label": [
+            7,
+            7,
+            8,
+            7
+        ]
+    },
+    {
+        "id": 4654,
+        "gt_label": "hornbill",
+        "pred_label": "hornbill",
+        "gt_id": 93,
+        "pred_score": 0.9387581944465637,
+        "gt_score": 0.9387581944465637,
+        "prompt_text": "<image>Output:hornbill<|endofchunk|><image>Output:hornbill<|endofchunk|><image>Output:hornbill<|endofchunk|><image>Output:hornbill<|endofchunk|><image>Output:",
+        "prompt_label": [
+            7,
+            7,
+            8,
+            7
+        ]
+    },
+    {
+        "id": 960,
+        "gt_label": "chickadee",
+        "pred_label": "chickadee",
+        "gt_id": 19,
+        "pred_score": 0.8965568542480469,
+        "gt_score": 0.8965568542480469,
+        "prompt_text": "<image>Output:chickadee<|endofchunk|><image>Output:junco<|endofchunk|><image>Output:chickadee<|endofchunk|><image>Output:magpie<|endofchunk|><image>Output:",
+        "prompt_label": [
+            7,
+            7,
+            8,
+            7
+        ]
+    },
+    {
+        "id": 431,
+        "gt_label": "hen",
+        "pred_label": "hen",
+        "gt_id": 8,
+        "pred_score": 0.7215476036071777,
+        "gt_score": 0.7215476036071777,
+        "prompt_text": "<image>Output:rooster<|endofchunk|><image>Output:hen<|endofchunk|><image>Output:hen<|endofchunk|><image>Output:rooster<|endofchunk|><image>Output:",
+        "prompt_label": [
+            7,
+            7,
+            8,
+            7
+        ]
+    },
+    {
+        "id": 376,
+        "gt_label": "rooster",
+        "pred_label": "hen",
+        "gt_id": 7,
+        "pred_score": 0.8806187510490417,
+        "gt_score": 0.00875212624669075,
+        "prompt_text": "<image>Output:rooster<|endofchunk|><image>Output:rooster<|endofchunk|><image>Output:hen<|endofchunk|><image>Output:rooster<|endofchunk|><image>Output:",
+        "prompt_label": [
+            7,
+            7,
+            8,
+            7
+        ]
+    }
+]

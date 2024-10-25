@@ -431,7 +431,7 @@ class Online_ICL:
             self.all_class_names
         )["input_ids"]
 
-        predicted_classnames,predicted_logprobs,overall_log_probs = get_topk_classifications(outputs,classnames_tokens)
+        predicted_classnames,predicted_logprobs,overall_log_probs = get_topk_classifications(outputs,classnames_tokens,topk=2,temperature=self.args.temperature)
         # compute accuracy
         y_i = sample.label
 
@@ -513,7 +513,7 @@ class Online_ICL:
             self.get_response_idefics(sample)
         if sample.pseudo_label == sample.label:
             self.right_sample_num += 1
-        self.retriever.update_online(sample)
+        
 
     def evaluate_batch_on_OFv2(self, batch_samples):
         batch_images = []
@@ -554,7 +554,8 @@ class Online_ICL:
         predicted_classnames_batch, predicted_logprobs_batch, overall_log_probs = get_topk_classifications_batch(
             outputs,
             classnames_tokens,
-            self.topk
+            self.topk,
+            temperature=self.args.temperature
         )
 
         # Process predictions for each sample
@@ -777,28 +778,20 @@ class Online_ICL:
         print(f"Get the value of every sample in support set")
         sample_pool_rng.shuffle(sample_pool)  # 使用单独的 random 对象打乱 sample_pool
 
-        #for idx in tqdm(range(len(sample_pool)), desc=f"Preprocess Sample Pool ..."):
-            # 对sample进行预处理
-            #sample_pool_sample = self.preprocess(sample_pool[idx])
-            #self.retriever.pool.append(sample_pool_sample)
-
-        # 打乱 validate_set 的索引
+        # 测子集
         shuffled_indices = list(range(len(validate_set)))
         validate_rng.shuffle(shuffled_indices)
 
-        # 需要对数据流的数据做推理
-        # for idx in tqdm(range(len(sample_pool)), desc=f"inferenc sample pool meanwhile updating the support set..."):
-        #     sample = sample_pool.pop()
-        #     sample = self.preprocess_train(sample)
-        #     self.inference(sample)
-        #     del sample
-        #sample_pool = sample_pool[0:10]
-        total_samples = len(sample_pool)  # 获取样本池的初始大小
-        pbar = tqdm(total=total_samples, desc="Inferencing sample pool while updating the support set")
+        # 测全集
+        # shuffled_indices = list(range(len(test_dataset)))
+        # validate_rng.shuffle(shuffled_indices)
 
+        # 使用数据流更新 support set
+        total_samples = len(sample_pool)  # 获取样本池的初始大小
+        pbar = tqdm(total=total_samples, desc="Using sample pool while updating the support set")
         while sample_pool:  # 当 sample_pool 不为空时继续循环
             sample = sample_pool.pop()
-            self.inference(sample)
+            self.retriever.update_online(sample)
             del sample
             pbar.update(1)  # 每处理一个样本，更新进度条
 
@@ -807,20 +800,19 @@ class Online_ICL:
         #self.visualize_tsne("Updated Memory Bank t-SNE", f"./{self.args.dataset_mode}_{self.args.update_strategy}-updated_memory_bank-alpha={self.args.alpha}.jpg")
         print("Inference using the latest supporting set...")
 
-        # file_path = f'./error_rate_{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}.json'  # 确保 self.args.update_strategy 有效
-        # with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
-        #     json.dump(self.retriever.error_rate, json_file, indent=4)
-
-        # file_path = f'./{self.args.update_strategy}-gradientUpdate-alpha={self.args.alpha}-btea={self.args.beta}-delta={self.args.delta}.json'  # 确保 self.args.update_strategy 有效
-        # with open(file_path, 'w') as json_file:  # 确保 file_path 和 json_file 在这里定义
-        #     json.dump(self.retriever.support_gradient_list, json_file, indent=4)
-
         self.test_sample_num = 0
         self.right_sample_num = 0
+        # 测子集
         for i in tqdm(range(0, len(validate_set), self.args.batch_size), desc=f"Inference ImageNet..."):
             batch_indices = shuffled_indices[i:i + self.args.batch_size]
             batch_samples = [validate_set[idx] for idx in batch_indices]
             self.inference_batch(batch_samples)
+
+        # 测全集
+        # for i in tqdm(range(0, len(test_dataset), self.args.batch_size), desc=f"Inference ImageNet..."):
+        #     batch_indices = shuffled_indices[i:i + self.args.batch_size]
+        #     batch_samples = [test_dataset[idx] for idx in batch_indices]
+        #     self.inference_batch(batch_samples)
 
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc
@@ -992,6 +984,8 @@ class FewShot:
         self.test_sample_num += len(batch_samples)
         if self.args.model == "open_flamingo":
             self.evaluate_batch_on_OFv2(batch_samples)
+        elif self.args.model == "idefics":
+            self.evaluate_batch_on_idev2(batch_samples)
         for sample in batch_samples:
             if sample.pseudo_label == sample.label:
                 self.right_sample_num += 1
@@ -1038,7 +1032,7 @@ class FewShot:
         )
         sample.pseudo_label = predicted_classnames[0]
     
-    def get_response_idefics_batch(self,batch_samples):
+    def evaluate_batch_on_idev2(self,batch_samples):
         prompts = []
         for sample in batch_samples:
             demonstrations = self.retriever.get_demonstrations_from_bank(sample)

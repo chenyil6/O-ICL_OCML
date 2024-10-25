@@ -37,8 +37,8 @@ def get_args():
     # Hyper parameters for DAIL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
     parser.add_argument("--update_strategy", type=str, default="fixed_gradient") # noUpdate;prototype_feedback;gradient_prototype;fixed_gradient;cosine_gradient
-    parser.add_argument("--M", type=int, default=1000)
-    parser.add_argument("--catergory_num", type=int, default=100) # 测100类 还是 1k类
+    parser.add_argument("--M", type=int, default=1000) 
+    parser.add_argument("--catergory_num", type=int, default=1000) # 测100类 还是 1k类
     parser.add_argument("--batch_size", type=int, default=8)
     parser.add_argument("--alpha", type=float, default=0.4)
     parser.add_argument("--beta", type=float, default=0.1)

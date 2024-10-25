@@ -167,7 +167,13 @@ class DynamicReteiever:
         elif self.args.update_strategy == "time_decay":
             self.update_prototype_with_time_decay(query_sample)
         elif self.args.update_strategy == "fixed_gradient":
-            self.update_based_on_gradient_and_prototype_equal_fixed_gradient(query_sample,gradient =self.args.gradient)
+            self.update_based_on_fixed_gradient(query_sample,gradient =self.args.gradient)
+        elif self.args.update_strategy == "fixed_gradient_time_decay":  
+            self.update_based_on_fixed_gradient_and_time_decay(query_sample,gradient =self.args.gradient)
+        elif self.args.update_strategy == "cyclic_momentum_quality":  
+            self.update_based_on_cyclic_momentum_quality(query_sample)
+        elif self.args.update_strategy == "cyclic_momentum":  
+            self.update_based_on_cyclic_momentum(query_sample)
         else:
             print("update_strategy is not effective.")
             return
@@ -200,6 +206,25 @@ class DynamicReteiever:
 
         return support_gradient
 
+    def compute_cyclic_beta_quality(self, timestep, sample_quality, beta_max=0.9, beta_min=0.1, cycle_length=1000):
+        """
+        计算周期性动量系数 beta 随着时间步周期性变化
+        :param timestep: 当前推理的时间步
+        :param sample_quality: 样本质量（假设是 0 到 1 之间的浮点数）
+        :param beta_max: 动量的最大值
+        :param beta_min: 动量的最小值
+        :param cycle_length: 动量变化的周期长度
+        :return: 动态调整后的 beta 值
+        """
+        cycle_position = timestep % cycle_length
+        beta_t = beta_min + 0.5 * (beta_max - beta_min) * (1 + math.cos(2 * math.pi * cycle_position / cycle_length))
+        return beta_t * sample_quality
+
+    def compute_cyclic_beta(self, timestep, beta_max=0.9, beta_min=0.1, cycle_length=1000):
+        cycle_position = timestep % cycle_length
+        beta_t = beta_min + 0.5 * (beta_max - beta_min) * (1 + math.cos(2 * math.pi * cycle_position / cycle_length))
+        return beta_t
+    
     def update_based_on_gradient_and_prototype(self,query_sample):  #  alpha = 0.4,beta = 0.5,delta=0.1 :63.22
         query_embed = query_sample.embed
         label = query_sample.label
@@ -221,41 +246,6 @@ class DynamicReteiever:
 
         least_similar_sample = sample_list[least_similar_index]
         least_similar_sample.embed = (1 - support_gradient) * least_similar_sample.embed + support_gradient * query_embed
-        # 更新类别原型
-        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
-            
-        assert len(self.demonstrations) == self.args.M
-    
-    def update_based_on_cosine_and_gradient(self,query_sample):  #  alpha = 0.4,beta = 0.5,delta=0.1 :63.22
-        query_embed = query_sample.embed
-        label = query_sample.label
-        inference_result = 1 if query_sample.pseudo_label == label else 0
-        # 更新该类别的推理历史记录
-        self.error_history[label].append(1 - inference_result)  # 记录错误推理
-        # 计算 Support Gradient
-        support_gradient = self.compute_gradient(query_sample,self.args.alpha,self.args.beta,self.args.delta)
-        self.support_gradient_list.append(support_gradient)
-        
-        # 获取当前类别的样本列表
-        sample_list = self.label2sample[label]
-        # 获取当前类别的原型向量
-        current_prototype = self.label_to_prototype[label]
-
-        # 找到当前类别中最不相似的样本（与原型相距最远的样本）
-        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
-        least_similar_index = torch.argmin(similarities).item()
-
-        target_sample = sample_list[least_similar_index]
-
-        # 计算余弦退火更新幅度
-        alpha_0 = 1  # 初始学习率
-        # 使用余弦退火公式计算当前学习率
-        alpha_t = alpha_0 * 0.5 * (1 + math.cos(self.timestep * math.pi / 10000))
-        
-        # 结合支持梯度和余弦退火的更新
-        # 更新目标样本的嵌入向量，考虑支持梯度
-        target_sample.embed = (1 - alpha_t) * target_sample.embed + alpha_t * (query_embed + support_gradient)
-
         # 更新类别原型
         self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
             
@@ -299,7 +289,7 @@ class DynamicReteiever:
         # 更新时间步
         self.timestep += 1
     
-    def update_based_on_gradient_and_prototype_equal_fixed_gradient(self,query_sample,gradient): 
+    def update_based_on_fixed_gradient(self,query_sample,gradient): 
         query_embed = query_sample.embed
         label = query_sample.label
         # 计算 Support Gradient
@@ -319,8 +309,98 @@ class DynamicReteiever:
         # 更新类别原型
         self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
             
-        assert len(self.demonstrations) == self.args.M
+    
+    def update_based_on_fixed_gradient_and_time_decay(self, query_sample,gradient):
+        """
+        基于时间步衰减和原型反馈更新样本嵌入向量
+        """
+        # 获取 query 的嵌入向量和标签
+        query_embed = query_sample.embed
+        label = query_sample.label
+        inference_result = 1 if query_sample.pseudo_label == label else 0
+        # 更新该类别的推理历史记录
+        self.error_history[label].append(1 - inference_result)  # 记录错误推理
+
+        # 计算 Support Gradient
+        support_gradient = gradient
+
+        # 动态调整学习率（根据时间步）
+        base_lr = support_gradient  # 使用计算的 gradient 作为 base_lr
+        current_lr = self.adjust_learning_rate(base_lr, self.timestep)
+
+        # 获取当前类别的样本列表
+        sample_list = self.label2sample[label]
+        # 获取当前类别的原型向量
+        current_prototype = self.label_to_prototype[label]
+
+        # 计算与原型的相似度，找到最不相似的样本
+        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
+        least_similar_index = torch.argmin(similarities).item()
+        target_sample = sample_list[least_similar_index]
+
+        # 更新目标样本的嵌入向量，使用当前学习率
+        target_sample.embed = (1 - current_lr) * target_sample.embed + current_lr * query_embed
+
+        # 更新类别原型
+        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+
+        # 更新时间步
+        self.timestep += 1
+
+    def update_based_on_cyclic_momentum_quality(self, query_sample):
+        query_embed = query_sample.embed
+        label = query_sample.label
+        inference_result = 1 if query_sample.pseudo_label == label else 0
+        # 更新该类别的推理历史记录
+        self.error_history[label].append(1 - inference_result)  # 记录错误推理
+
+        # 获取当前类别的样本列表
+        sample_list = self.label2sample[label]
+        # 获取当前类别的原型向量
+        current_prototype = self.label_to_prototype[label]
+
+        # 计算与原型的相似度，找到最不相似的样本
+        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
+        least_similar_index = torch.argmin(similarities).item()
+        target_sample = sample_list[least_similar_index]
+
+        current_lr = self.compute_cyclic_beta_quality(self.timestep,query_sample.quality)
         
+        target_sample.embed = (1 - current_lr) * target_sample.embed + current_lr * query_embed
+
+        # 更新类别原型
+        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+
+        # 更新时间步
+        self.timestep += 1
+
+    def update_based_on_cyclic_momentum(self, query_sample):
+        query_embed = query_sample.embed
+        label = query_sample.label
+        inference_result = 1 if query_sample.pseudo_label == label else 0
+        # 更新该类别的推理历史记录
+        self.error_history[label].append(1 - inference_result)  # 记录错误推理
+
+        # 获取当前类别的样本列表
+        sample_list = self.label2sample[label]
+        # 获取当前类别的原型向量
+        current_prototype = self.label_to_prototype[label]
+
+        # 计算与原型的相似度，找到最不相似的样本
+        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
+        least_similar_index = torch.argmin(similarities).item()
+        target_sample = sample_list[least_similar_index]
+
+        current_lr = self.compute_cyclic_beta(self.timestep)
+        
+        target_sample.embed = (1 - current_lr) * target_sample.embed + current_lr * query_embed
+
+        # 更新类别原型
+        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+
+        # 更新时间步
+        self.timestep += 1
+
     def update_based_on_balance_balance_gradient_prototype(self, query_sample,max_samples_num=10): # 待评估
         query_embed = query_sample.embed
         label = query_sample.label

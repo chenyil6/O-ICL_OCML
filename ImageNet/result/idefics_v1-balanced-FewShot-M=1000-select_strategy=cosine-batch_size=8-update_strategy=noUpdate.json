@@ -1,0 +1,10 @@
+[
+    {
+        "id": 1383,
+        "gt_label": "newt",
+        "pred_label": "red-breasted merganser",
+        "gt_id": 27,
+        "pred_score": 0.03926798701286316,
+        "gt_score": 0.013570653274655342,
+        "prompt": [
+            

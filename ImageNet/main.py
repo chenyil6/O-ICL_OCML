@@ -26,18 +26,18 @@ def get_args():
         "--model",
         type=str,
         help="Model name. Currently only `OpenFlamingo` is supported.",
-        default="open_flamingo",# open_flamingo;idefics
+        default="open_flamingo",# open_flamingo;idefics_v1
     )       
 
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
     parser.add_argument("--dataset_mode", type=str, default="balanced") # balanced;imbalanced;
     parser.add_argument("--result_folder", type=str, default="./result")
-    parser.add_argument("--method", type=str, default="FewShot")# FewShot;Online_ICL;
+    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL;
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for OnlineICL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
     parser.add_argument("--dnum", type=int, default=4) 
-    parser.add_argument("--update_strategy", type=str, default="noUpdate") # noUpdate;prototype_feedback;gradient_prototype;fixed_gradient;
+    parser.add_argument("--update_strategy", type=str, default="gradient_prototype") # noUpdate;prototype_feedback;gradient_prototype;fixed_gradient;
     parser.add_argument("--M", type=int, default=1000) 
     parser.add_argument("--alpha", type=float, default=0.2)
     parser.add_argument("--beta", type=float, default=0)
@@ -71,9 +71,9 @@ if __name__ == "__main__":
             device=device_set,
             checkpoint_path="/data/share/OpenFlamingo-9B-vitl-mpt7b/checkpoint.pt"
         )
-    elif args.model == "idefics":
+    elif args.model == "idefics_v1":
         checkpoint = "/data1/pyz/model_weight/idefics-9b"
-        model = IdeficsForVisionText2Text.from_pretrained(checkpoint,local_files_only=True, torch_dtype=torch.bfloat16)
+        model = IdeficsForVisionText2Text.from_pretrained(checkpoint,local_files_only=True, torch_dtype=torch.bfloat16).to(device)
         processor = AutoProcessor.from_pretrained(checkpoint)
         image_processor = processor.image_processor
         tokenizer = processor.tokenizer
@@ -91,7 +91,7 @@ if __name__ == "__main__":
     if args.method == "Online_ICL":
         if args.model == "open_flamingo":
             inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device)
-        elif args.model == "idefics":
+        elif args.model == "idefics_v1":
             inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
         else:
             raise ValueError(f"Unsupported model type: {args.model}")
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     elif args.method == "FewShot":
         if args.model == "open_flamingo":
             inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
-        elif args.model == "idefics":
+        elif args.model == "idefics_v1":
             inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
         else:
             raise ValueError(f"Unsupported model type: {args.model}")

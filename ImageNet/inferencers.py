@@ -146,7 +146,7 @@ class Online_ICL:
         sample.gt_score = gt_label_confidence 
         sample.margin = margin
 
-    def get_response_idefics(self,sample):
+    def get_response_ideficsv1(self,sample):
         demonstrations = self.retriever.get_demonstrations_from_bank(sample)
         prompt = []
         if demonstrations is not None:
@@ -193,8 +193,8 @@ class Online_ICL:
         self.test_sample_num += 1
         if self.args.model == "open_flamingo":
             self.get_response_OFv2(sample)
-        if self.args.model == "idefics":
-            self.get_response_idefics(sample)
+        if self.args.model == "idefics_v1":
+            self.get_response_ideficsv1(sample)
         if sample.pseudo_label == sample.label:
             self.right_sample_num += 1
         self.retriever.update_online(sample)
@@ -318,11 +318,57 @@ class Online_ICL:
             attention_mask = attention_mask.to(self.device)
             return input_ids, attention_mask
 
+    def evaluate_batch_on_idev1(self,batch_samples):
+        prompts = []
+        for sample in batch_samples:
+            demonstrations = self.retriever.get_demonstrations_from_bank(sample)
+            prompt = []
+            if demonstrations is not None:
+                for dm in demonstrations:
+                    prompt.append(dm.image)
+                    prompt.append(f"Output:{dm.pseudo_label}"+"\n")
+            prompt.append(sample.image)
+            prompt.append(f"Output:")
+            prompts.append(prompt)
+
+        inputs = self.processor(prompts, return_tensors="pt").to(self.device)
+        bad_words_ids = self.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
+
+        with torch.no_grad():
+            outputs = self.model.generate(**inputs,
+                                        max_new_tokens=20,
+                                        bad_words_ids=bad_words_ids,
+                                        output_scores=True,
+                                        return_dict_in_generate=True)
+
+        classnames_tokens = self.tokenizer(self.all_class_names)["input_ids"]
+
+        for i, sample in enumerate(batch_samples):
+            predicted_classnames, predicted_logprobs, average_log_prob = get_topk_classifications(outputs[i],
+                                                                                                classnames_tokens,
+                                                                                                self.topk)
+            # compute accuracy
+            y_i = sample.label
+            relative_score = torch.exp(torch.tensor(predicted_logprobs[0] - average_log_prob)).item()
+            self.predictions.append(
+                {
+                    "id": sample.idx,
+                    "gt_label": y_i,
+                    "pred_label": predicted_classnames[0],
+                    "gt_id": sample.class_id,
+                    "pred_score": relative_score,
+                    "prompt": prompts[i]
+                }
+            )
+            sample.pseudo_label = predicted_classnames[0]
+
     def inference_batch(self,batch_samples):
         batch_samples = [self.preprocess_val(sample) for sample in batch_samples]
         self.test_sample_num += len(batch_samples)
         if self.args.model == "open_flamingo":
             self.evaluate_batch_on_OFv2(batch_samples)
+        if self.args.model == "idefics_v1":
+            self.evaluate_batch_on_idev1(batch_samples)
         for sample in batch_samples:
             if sample.pseudo_label == sample.label:
                 self.right_sample_num += 1
@@ -665,8 +711,8 @@ class FewShot:
         self.test_sample_num += len(batch_samples)
         if self.args.model == "open_flamingo":
             self.evaluate_batch_on_OFv2(batch_samples)
-        elif self.args.model == "idefics":
-            self.evaluate_batch_on_idev2(batch_samples)
+        elif self.args.model == "idefics_v1":
+            self.evaluate_batch_on_idev1(batch_samples)
         for sample in batch_samples:
             if sample.pseudo_label == sample.label:
                 self.right_sample_num += 1
@@ -713,7 +759,7 @@ class FewShot:
         )
         sample.pseudo_label = predicted_classnames[0]
     
-    def evaluate_batch_on_idev1(self,batch_samples):
+    def evaluate_batch_on_idev1(self, batch_samples):
         prompts = []
         for sample in batch_samples:
             demonstrations = self.retriever.get_demonstrations_from_bank(sample)
@@ -721,7 +767,7 @@ class FewShot:
             if demonstrations is not None:
                 for dm in demonstrations:
                     prompt.append(dm.image)
-                    prompt.append(f"Output:{dm.pseudo_label}"+"\n")
+                    prompt.append(f"Output:{dm.pseudo_label}\n")
             prompt.append(sample.image)
             prompt.append(f"Output:")
             prompts.append(prompt)
@@ -730,33 +776,43 @@ class FewShot:
         bad_words_ids = self.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
 
         with torch.no_grad():
-            outputs = self.model.generate(**inputs,
-                                        max_new_tokens=20,
-                                        bad_words_ids=bad_words_ids,
-                                        output_scores=True,
-                                        return_dict_in_generate=True)
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=20,
+                bad_words_ids=bad_words_ids,
+                output_scores=True,
+                return_dict_in_generate=True
+            )
 
         classnames_tokens = self.tokenizer(self.all_class_names)["input_ids"]
 
-        for i, sample in enumerate(batch_samples):
-            predicted_classnames, predicted_logprobs, average_log_prob = get_topk_classifications(outputs[i],
-                                                                                                classnames_tokens,
-                                                                                                self.topk)
-            # compute accuracy
+        # 调用一次 get_topk_classifications_batch，处理整个批次的输出
+        predicted_classnames_batch, predicted_probs_batch, overall_probs = get_topk_classifications_batch(
+            outputs,
+            classnames_tokens,
+            self.topk
+        )
+
+        # 遍历每个样本，根据索引获取对应的预测结果
+        for idx, sample in enumerate(batch_samples):
             y_i = sample.label
-            relative_score = torch.exp(torch.tensor(predicted_logprobs[0] - average_log_prob)).item()
+            gt_label_index = self.all_class_names.index(y_i)
+            gt_label_confidence = overall_probs[idx, gt_label_index].item()
+
             self.predictions.append(
                 {
                     "id": sample.idx,
                     "gt_label": y_i,
-                    "pred_label": predicted_classnames[0],
+                    "pred_label": predicted_classnames_batch[idx][0],
                     "gt_id": sample.class_id,
-                    "pred_score": relative_score,
-                    "prompt": prompts[i]
+                    "pred_score": predicted_probs_batch[idx][0],
+                    "gt_score": gt_label_confidence,
                 }
             )
-            sample.pseudo_label = predicted_classnames[0]
-    
+            sample.pred_score = predicted_probs_batch[idx][0]
+            sample.pseudo_label = predicted_classnames_batch[idx][0]
+            sample.gt_score = gt_label_confidence
+
     def preprocess_train(self, sample):
         idx = sample["id"]
         image = sample["image"]
@@ -782,11 +838,13 @@ class FewShot:
             index_file="./imagenet_class_indices.pkl"  # 指定索引文件路径
         )
         test_dataset = ImageNetDataset(os.path.join("/data/hyh/imagenet/data", "val"))
-        # 子集
-        validate_set = Subset(test_dataset, list(range(5000))) #取前5000个样本作为validate set
         # 设置全局随机种子
         random.seed(self.args.seed)
-    
+        if self.args.catergory_num == 100: # 测100类
+            test_dataset = Subset(test_dataset, list(range(5000))) #取前5000个样本作为validate set
+            self.all_class_names = IMAGENET_CLASSNAMES_100
+        else:
+            self.all_class_names = IMAGENET_CLASSNAMES
         # 创建不同的随机数生成器
         validate_rng = random.Random(self.args.seed)
         class_selection_rng = random.Random(self.args.seed + 3)
@@ -798,18 +856,8 @@ class FewShot:
             for class_id in tqdm(range(len(self.all_class_names)),desc="get samples for each class"):
                 data_list = train_dataset.get_data_list_by_class(class_id=class_id)
                 support_set.extend(data_list[0:10])
-                support_set.extend(data_list[50:150])
-        else: # imbalanced
-            num_classes = len(self.all_class_names)
-            no_sample_classes = class_selection_rng.sample(range(num_classes), num_classes // 2)
-            for i in range(len(self.all_class_names)):
-                class_name = self.all_class_names[i]
-                class_samples = train_dataset.get_data_list_by_class(class_name=class_name)
-                if i in no_sample_classes:
-                    continue
-                else:
-                    support_set.extend(class_samples[:self.args.M*2//100])
-                    
+                #support_set.extend(data_list[50:150])
+              
         # 输出支持集 大小以确认正确性
         print(f"Support set size: {len(support_set)}")
 
@@ -818,27 +866,17 @@ class FewShot:
             support_sample = self.preprocess_train(support_set[idx])
             self.retriever.demonstrations.append(support_sample)
 
-        # 测全集
-        # shuffled_indices = list(range(len(test_dataset)))
-        # validate_rng.shuffle(shuffled_indices)
-        # num_samples = len(shuffled_indices)
-
-        # 测子集
-        # 打乱验证集的索引
-        shuffled_indices = list(range(len(validate_set)))
+        shuffled_indices = list(range(len(test_dataset)))
         validate_rng.shuffle(shuffled_indices)
 
         self.test_sample_num = 0
         self.right_sample_num = 0
-        # for idx in tqdm(shuffled_indices, desc="Inference ImageNet..."):
-        #     validate_sample = test_dataset[idx]
-        #     self.inference(validate_sample)
-
+        
         batch_size = self.args.batch_size  
 
-        for i in tqdm(range(0, len(validate_set), batch_size), desc=f"Inference ImageNet..."):
+        for i in tqdm(range(0, len(test_dataset), batch_size), desc=f"Inference ImageNet..."):
             batch_indices = shuffled_indices[i:i + batch_size]
-            batch_samples = [validate_set[idx] for idx in batch_indices]
+            batch_samples = [test_dataset[idx] for idx in batch_indices]
             self.inference_batch(batch_samples)
 
         acc = self.right_sample_num / self.test_sample_num

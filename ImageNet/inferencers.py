@@ -197,8 +197,8 @@ class Online_ICL:
             self.get_response_idefics(sample)
         if sample.pseudo_label == sample.label:
             self.right_sample_num += 1
+        self.retriever.update_online(sample)
         
-
     def evaluate_batch_on_OFv2(self, batch_samples):
         batch_images = []
         batch_text = []
@@ -239,7 +239,6 @@ class Online_ICL:
             outputs,
             classnames_tokens,
             self.topk,
-            temperature=self.args.temperature
         )
 
         # Process predictions for each sample
@@ -474,12 +473,12 @@ class Online_ICL:
         validate_rng.shuffle(shuffled_indices)
 
         # 使用数据流更新 support set
+        #sample_pool=sample_pool[0:10]
         total_samples = len(sample_pool)  # 获取样本池的初始大小
         pbar = tqdm(total=total_samples, desc="Using sample pool to update the support set")
         while sample_pool:  # 当 sample_pool 不为空时继续循环
             sample = sample_pool.pop()
-            sample = self.preprocess_train(sample)
-            self.retriever.update_online(sample)
+            self.inference(sample)
             del sample
             pbar.update(1)  # 每处理一个样本，更新进度条
 
@@ -495,7 +494,7 @@ class Online_ICL:
             batch_indices = shuffled_indices[i:i + self.args.batch_size]
             batch_samples = [test_dataset[idx] for idx in batch_indices]
             self.inference_batch(batch_samples)
-
+        
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc
 

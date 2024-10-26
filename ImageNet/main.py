@@ -21,31 +21,31 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="0")
+    parser.add_argument("--device", type=str, default="1")
     parser.add_argument(
         "--model",
         type=str,
         help="Model name. Currently only `OpenFlamingo` is supported.",
-        default="open_flamingo",
+        default="open_flamingo",# open_flamingo;idefics
     )       
 
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
     parser.add_argument("--dataset_mode", type=str, default="balanced") # balanced;imbalanced;
     parser.add_argument("--result_folder", type=str, default="./result")
-    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL;Online_ICL_Old
+    parser.add_argument("--method", type=str, default="FewShot")# FewShot;Online_ICL;
     parser.add_argument("--seed", type=int, default=42)     
-    # Hyper parameters for DAIL
+    # Hyper parameters for OnlineICL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
-    parser.add_argument("--update_strategy", type=str, default="fixed_gradient") # noUpdate;prototype_feedback;gradient_prototype;fixed_gradient;cosine_gradient
+    parser.add_argument("--dnum", type=int, default=4) 
+    parser.add_argument("--update_strategy", type=str, default="noUpdate") # noUpdate;prototype_feedback;gradient_prototype;fixed_gradient;
     parser.add_argument("--M", type=int, default=1000) 
-    parser.add_argument("--catergory_num", type=int, default=1000) # 测100类 还是 1k类
+    parser.add_argument("--alpha", type=float, default=0.2)
+    parser.add_argument("--beta", type=float, default=0)
+    parser.add_argument("--delta", type=float, default=0.2)
+    parser.add_argument("--catergory_num", type=int, default=100) # 测100类 还是 1k类
     parser.add_argument("--batch_size", type=int, default=8)
-    parser.add_argument("--alpha", type=float, default=0.4)
-    parser.add_argument("--beta", type=float, default=0.1)
-    parser.add_argument("--delta", type=float, default=0.5)
-    parser.add_argument("--decay", type=float, default=1e-4)
-    parser.add_argument("--temperature", type=float, default=2.0)
     parser.add_argument("--gradient", type=float, default=0.2)
+    parser.add_argument("--temperature", type=float, default=2.0)
     arguments = parser.parse_args()
     return arguments
 
@@ -72,7 +72,7 @@ if __name__ == "__main__":
             checkpoint_path="/data/share/OpenFlamingo-9B-vitl-mpt7b/checkpoint.pt"
         )
     elif args.model == "idefics":
-        checkpoint = "/data/share/pyz/model_weight/idefics-9b"
+        checkpoint = "/data1/pyz/model_weight/idefics-9b"
         model = IdeficsForVisionText2Text.from_pretrained(checkpoint,local_files_only=True, torch_dtype=torch.bfloat16)
         processor = AutoProcessor.from_pretrained(checkpoint)
         image_processor = processor.image_processor
@@ -88,16 +88,7 @@ if __name__ == "__main__":
             '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
     print("load clip successfully...")
 
-    if args.method == "Online_ICL_Old":
-        if args.model == "open_flamingo":
-            inferencer = Online_ICL_Old(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device)
-        elif args.model == "idefics":
-            inferencer = Online_ICL_Old(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
-        else:
-            raise ValueError(f"Unsupported model type: {args.model}")
-
-        results, predictions = inferencer.run()
-    elif args.method == "Online_ICL":
+    if args.method == "Online_ICL":
         if args.model == "open_flamingo":
             inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device)
         elif args.model == "idefics":
@@ -120,22 +111,15 @@ if __name__ == "__main__":
         results = None
 
     results = {"device":args.device,"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
-               "batch_size":args.batch_size,"update_strategy":args.update_strategy,"alpha": args.alpha,"beta":args.beta,"delta":args.delta,"decay":args.decay,"T":args.temperature,"gradient":args.gradient,"catergory_num":args.catergory_num,"results": results}
+               "batch_size":args.batch_size,"update_strategy":args.update_strategy,"gradient":args.gradient,"catergory_num":args.catergory_num,"dnum":args.dnum,
+               "alpha":args.alpha,"beta":args.beta,"delta":args.delta,"results": results}
     print("-------------------------final-results-----------------------")
     print(results)
     
-    if args.method == "Online_ICL_Old": 
+    if args.method == "Online_ICL": 
         res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}-batch_size={args.batch_size}"
-                                                f"-update_strategy={args.update_strategy}.json")
+                                                f"-update_strategy={args.update_strategy}-gradient={args.gradient}-shot={args.dnum}.json")
 
-        
-        with open(res_file_last, 'w') as json_file:
-            json.dump(predictions, json_file, indent=4)
-    elif args.method == "Online_ICL": 
-        res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}-batch_size={args.batch_size}"
-                                                f"-update_strategy={args.update_strategy}-alpha={args.alpha}-beta={args.beta}-delta={args.delta}.json")
-
-        
         with open(res_file_last, 'w') as json_file:
             json.dump(predictions, json_file, indent=4)
     else: # FewShot

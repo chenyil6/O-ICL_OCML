@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 def get_imagenet_prompt(label=None) -> str:
     return f"<image>Output:{label if label is not None else ''}{'<|endofchunk|>' if label is not None else ''}"
 
-def get_topk_classifications(outputs, classnames_tokens, topk=2, temperature=3.0):
+def get_topk_classifications(outputs, classnames_tokens, topk=2, temperature=2.0):
     overall_log_probs = torch.zeros(len(classnames_tokens))
     for idx, ct in enumerate(classnames_tokens):
         classname_tokens_num = len(ct)
@@ -49,7 +49,7 @@ def get_topk_classifications(outputs, classnames_tokens, topk=2, temperature=3.0
     )
     return predicted_classnames, predicted_probs, probs_tensor
 
-def get_topk_classifications_batch(outputs, classnames_tokens, topk, temperature=3.0, class_id_to_name=IMAGENET_1K_CLASS_ID_TO_LABEL):
+def get_topk_classifications_batch(outputs, classnames_tokens, topk, temperature=2.0, class_id_to_name=IMAGENET_1K_CLASS_ID_TO_LABEL):
     """
     Computes the top-k classifications for a batch of samples.
 

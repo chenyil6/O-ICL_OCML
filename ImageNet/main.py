@@ -26,7 +26,7 @@ def get_args():
         "--model",
         type=str,
         help="Model name. Currently only `OpenFlamingo` is supported.",
-        default="idefics_v2",# open_flamingo_9b;idefics_v2;
+        default="open_flamingo_9b",# open_flamingo_9b;idefics_v2;
     )       
 
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
@@ -69,7 +69,7 @@ if __name__ == "__main__":
         )
     elif args.model == "idefics_v2":
         checkpoint = "/data1/pyz/model_weight/idefics2-8b-base"
-        model = AutoModelForVision2Seq.from_pretrained(checkpoint,local_files_only=True, torch_dtype=torch.bfloat16).to(device_set)
+        model = AutoModelForVision2Seq.from_pretrained(checkpoint,local_files_only=True, torch_dtype=torch.bfloat16, device_map="auto") #.to(device_set)
         model.requires_grad_(False)
         processor = AutoProcessor.from_pretrained(checkpoint)
         processor.image_processor.do_image_split = False

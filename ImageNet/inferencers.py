@@ -415,7 +415,7 @@ class Online_ICL:
     def inference_batch(self,batch_samples):
         batch_samples = [self.preprocess_val(sample) for sample in batch_samples]
         self.test_sample_num += len(batch_samples)
-        if self.args.model == "open_flamingo":
+        if self.args.model == "open_flamingo_9b":
             self.evaluate_batch_on_OFv2(batch_samples)
         if self.args.model == "idefics_v2":
             self.evaluate_batch_on_idev2(batch_samples)
@@ -632,10 +632,6 @@ class FewShot:
         self.topk = 1       
         self.features_data_train = pickle.load(open("/data/chy/feacture_cache/train_idx2embed_quality.pkl", 'rb'))
         self.features_data_val = pickle.load(open("/data/chy/feacture_cache/val_idx2embed.pkl",'rb'))
-        self.features_data_train_64_1024 = pickle.load(open("/data/chy/feacture_cache/train_features_64x1024.pkl", 'rb'))
-        self.features_data_train_256_1024 = pickle.load(open("/data/chy/feacture_cache/train_features_256x1024.pkl", 'rb'))
-        self.features_data_val_64_1024 = pickle.load(open("/data/chy/feacture_cache/val_features_64x1024.pkl", 'rb'))
-        self.features_data_val_256_1024 = pickle.load(open("/data/chy/feacture_cache/val_features_256x1024.pkl", 'rb'))
 
     def get_embedding(self, image):
         inputs = self.embedding_processor(images=image, return_tensors="pt")
@@ -646,16 +642,14 @@ class FewShot:
     def evaluate_batch_on_OFv2(self, batch_samples):
         batch_images = []
         batch_text = []
+        batch_demonstrations = []
         for sample in batch_samples: # 遍历每个sample，找到分别对应的context
             ice_img,ice_text,demonstrations = self.retriever.get_final_query(sample)
-            ice_img_tensor = torch.stack(ice_img)  # 形状变为 (5, 64, 1024)
-            batch_images.append(ice_img_tensor)
+            batch_images.append(ice_img)
             batch_text.append(ice_text)
+            batch_demonstrations.append(demonstrations)
 
-        #batch_images = self._prepare_images(batch_images)
-        # 将所有的 (5, 64, 1024) tensor 堆叠成 (batch_size, 5, 64, 1024)
-        batch_images = torch.stack(batch_images)  # 形状变为 (batch_size, 5, 64, 1024)
-        batch_images = batch_images.unsqueeze(2).to(self.device)  # 变为 (batch_size, 5, 1, 256, 1024)
+        batch_images = self._prepare_images(batch_images)
         ctx_input_ids, ctx_attention_mask = self._prepare_text(batch_text)
 
         _lang_x = torch.cat([ctx_input_ids], dim=1)
@@ -665,15 +659,22 @@ class FewShot:
             ],
             dim=1,
         )
-        #_vision_x = batch_images
-        _vision_x = None
+        _vision_x = batch_images
+
+        _lang_x = torch.cat([ctx_input_ids], dim=1)
+        _attention_mask = torch.cat(
+            [
+                ctx_attention_mask,
+            ],
+            dim=1,
+        )
+        _vision_x = batch_images
 
         with torch.no_grad():
             outputs = self.model.generate(
                 vision_x=_vision_x,
                 lang_x=_lang_x,
                 attention_mask=_attention_mask,
-                vision_features = batch_images,
                 max_new_tokens=20,
                 min_new_tokens=1,
                 num_beams=1,
@@ -779,7 +780,7 @@ class FewShot:
     def inference_batch(self,batch_samples):
         batch_samples = [self.preprocess_val(sample) for sample in batch_samples]
         self.test_sample_num += len(batch_samples)
-        if self.args.model == "open_flamingo":
+        if self.args.model == "open_flamingo_9b":
             self.evaluate_batch_on_OFv2(batch_samples)
         elif self.args.model == "idefics_v2":
             self.evaluate_batch_on_idev2(batch_samples)
@@ -790,10 +791,10 @@ class FewShot:
     def inference(self, sample):
         sample = self.preprocess_train(sample)
         self.test_sample_num += 1
-        if self.args.model == "open_flamingo":
+        if self.args.model == "open_flamingo_9b":
             self.get_response_OFv2(sample)
-        if self.args.model == "idefics_v1":
-            self.get_response_ideficsv1(sample)
+        if self.args.model == "idefics_v2":
+            self.get_response_ideficsv2(sample)
         if sample.pseudo_label == sample.label:
             self.right_sample_num += 1
 
@@ -853,7 +854,7 @@ class FewShot:
                     "gt_id": sample.class_id,
                     "pred_score": predicted_logprobs_batch[idx][0],
                     "gt_score": gt_label_confidence,
-                    "prompt_label": [dm.class_id for dm in demonstrations]
+                    "prompt_label": [dm.label for dm in demonstrations]
                 }
             )
             sample.pred_score = predicted_logprobs_batch[idx][0]

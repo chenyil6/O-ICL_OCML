@@ -18,7 +18,7 @@ def get_args():
         "--model",
         type=str,
         help="Model name. Currently only `OpenFlamingo` is supported.",
-        default="open_flamingo_9b",# open_flamingo_9b;idefics_v2;
+        default="idefics_v2",# open_flamingo_9b;idefics_v2;
     )       
 
     parser.add_argument("--imagenet_root", type=str, default="/tmp")

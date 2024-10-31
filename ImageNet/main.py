@@ -1,7 +1,7 @@
 import argparse
 from inferencers import *
 import logging
-from transformers import AutoTokenizer, CLIPModel,AutoProcessor
+from transformers import AutoTokenizer, CLIPModel,AutoProcessor, AutoModelForVision2Seq
 import sys
 sys.path.append('/data/chy/online')
 from open_flamingo_v2.open_flamingo.src.factory import create_model_and_transforms
@@ -21,31 +21,27 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="1")
+    parser.add_argument("--device", type=str, default="0")
     parser.add_argument(
         "--model",
         type=str,
         help="Model name. Currently only `OpenFlamingo` is supported.",
-        default="open_flamingo",# open_flamingo;idefics_v1
+        default="idefics_v2",# open_flamingo_9b;idefics_v2;
     )       
 
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
     parser.add_argument("--dataset_mode", type=str, default="balanced") # balanced;imbalanced;
     parser.add_argument("--result_folder", type=str, default="./result")
-    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL;
+    parser.add_argument("--method", type=str, default="FewShot")# FewShot;Online_ICL;
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for OnlineICL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
     parser.add_argument("--dnum", type=int, default=4) 
-    parser.add_argument("--update_strategy", type=str, default="gradient_prototype") # noUpdate;prototype_feedback;gradient_prototype;fixed_gradient;
+    parser.add_argument("--update_strategy", type=str, default="noUpdate") # noUpdate;multi_step;cyclic;fixed;imbalanced
     parser.add_argument("--M", type=int, default=1000) 
-    parser.add_argument("--alpha", type=float, default=0.2)
-    parser.add_argument("--beta", type=float, default=0)
-    parser.add_argument("--delta", type=float, default=0.2)
     parser.add_argument("--catergory_num", type=int, default=100) # 测100类 还是 1k类
-    parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--batch_size", type=int, default=4)
     parser.add_argument("--gradient", type=float, default=0.2)
-    parser.add_argument("--temperature", type=float, default=2.0)
     arguments = parser.parse_args()
     return arguments
 
@@ -59,7 +55,7 @@ if __name__ == "__main__":
     if not os.path.exists(args.result_folder):
         os.makedirs(args.result_folder)
 
-    if args.model == "open_flamingo":
+    if args.model == "open_flamingo_9b":
         model, image_processor, tokenizer = create_model_and_transforms(
             clip_vision_encoder_path="ViT-L-14",
             clip_vision_encoder_pretrained="openai",
@@ -71,10 +67,12 @@ if __name__ == "__main__":
             device=device_set,
             checkpoint_path="/data/share/OpenFlamingo-9B-vitl-mpt7b/checkpoint.pt"
         )
-    elif args.model == "idefics_v1":
-        checkpoint = "/data1/pyz/model_weight/idefics-9b"
-        model = IdeficsForVisionText2Text.from_pretrained(checkpoint,local_files_only=True, torch_dtype=torch.bfloat16).to(device)
+    elif args.model == "idefics_v2":
+        checkpoint = "/data1/pyz/model_weight/idefics2-8b-base"
+        model = AutoModelForVision2Seq.from_pretrained(checkpoint,local_files_only=True, torch_dtype=torch.bfloat16).to(device_set)
+        model.requires_grad_(False)
         processor = AutoProcessor.from_pretrained(checkpoint)
+        processor.image_processor.do_image_split = False
         image_processor = processor.image_processor
         tokenizer = processor.tokenizer
     else:
@@ -89,18 +87,18 @@ if __name__ == "__main__":
     print("load clip successfully...")
 
     if args.method == "Online_ICL":
-        if args.model == "open_flamingo":
+        if args.model == "open_flamingo_9b":
             inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device)
-        elif args.model == "idefics_v1":
-            inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
+        elif args.model == "idefics_v2":
+            inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device,processor=processor)
         else:
             raise ValueError(f"Unsupported model type: {args.model}")
 
         results, predictions = inferencer.run()
     elif args.method == "FewShot":
-        if args.model == "open_flamingo":
+        if args.model == "open_flamingo_9b":
             inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
-        elif args.model == "idefics_v1":
+        elif args.model == "idefics_v2":
             inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
         else:
             raise ValueError(f"Unsupported model type: {args.model}")
@@ -112,7 +110,7 @@ if __name__ == "__main__":
 
     results = {"device":args.device,"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
                "batch_size":args.batch_size,"update_strategy":args.update_strategy,"gradient":args.gradient,"catergory_num":args.catergory_num,"dnum":args.dnum,
-               "alpha":args.alpha,"beta":args.beta,"delta":args.delta,"results": results}
+               "results": results}
     print("-------------------------final-results-----------------------")
     print(results)
     

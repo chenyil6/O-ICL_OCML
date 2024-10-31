@@ -7,6 +7,7 @@ import numpy as np
 import time
 from collections import defaultdict, deque
 import logging
+import torch.nn.functional as F
 import math
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,9 @@ class DynamicReteiever:
         self.error_rate = {}
         self.class_gradients = defaultdict(list)
         self.timestep = 0
-    
+        self.match_pool = []
+        self.dismatch_pool = []
+
     def get_final_query(self, sample):
         demonstrations = self.get_demonstrations_from_bank(sample)
         ice_text = ""
@@ -31,18 +34,20 @@ class DynamicReteiever:
             for dm in demonstrations:
                 ice_img.append(dm.image)
                 ice_text += get_imagenet_prompt(dm.label)
-
+                    
         ice_img.append(sample.image)
         ice_text += get_imagenet_prompt()
         return ice_img,ice_text,demonstrations
 
     def get_demonstrations_from_bank(self, sample):
+        if self.args.dnum == 0:
+            return []
         if self.args.select_strategy == "random":
             indices = self.get_random(sample)
         elif self.args.select_strategy == "cosine":
             indices = self.get_topk_cosine(sample)
         elif self.args.select_strategy == "l2":
-            indices = self.get_topk_l2(sample)
+            indices = self.get_topk_euclidean(sample)
         else:
             print("select_strategy is not effective.")
             return
@@ -54,16 +59,35 @@ class DynamicReteiever:
 
     def get_topk_cosine(self, sample):
         demonstration_embeds = torch.stack([sample.embed for sample in self.demonstrations], dim=0)
-        #logging.info(f"demonstration_embeds 的设备在: {demonstration_embeds.device}")
         device_set = "cuda:" + str(self.args.device)
         device = torch.device(device_set)
         demonstration_embeds = demonstration_embeds.to(device)
         sample_embed = sample.embed.to(device)
-        #scores = torch.cosine_similarity(demonstration_embeds, sample.embed, dim=-1)
-        scores = torch.cosine_similarity(demonstration_embeds, sample_embed, dim=-1)
+        scores = torch.cosine_similarity(demonstration_embeds, sample_embed.unsqueeze(0), dim=-1)
+        #mean_scores = scores.mean(dim=1)  # 现在的形状是 (N,)
         values, indices = torch.topk(scores, self.args.dnum, largest=True)
         indices = indices.cpu().tolist()
-        #indices = indices.tolist()
+        return indices
+    
+    def get_topk_euclidean(self, sample):
+        device_set = "cuda:" + str(self.args.device)
+        device = torch.device(device_set)
+        # 将所有 demonstrations 的嵌入拼接成一个张量
+        demonstration_embeds = torch.stack([sample.embed for sample in self.demonstrations], dim=0)
+        
+        demonstration_embeds = demonstration_embeds.to(device)
+        
+        # 将样本的嵌入也移动到相同的设备
+        sample_embed = sample.embed.to(device)
+        
+        # 计算 sample_embed 和 demonstration_embeds 的欧几里得距离
+        distances = F.pairwise_distance(demonstration_embeds, sample_embed.unsqueeze(0), p=2)
+        
+        # 选取距离最小的 k 个样本
+        values, indices = torch.topk(distances, self.args.dnum, largest=False)  # 使用 smallest k 的方式
+        
+        # 将索引从 GPU 移动到 CPU，并转换为列表返回
+        indices = indices.cpu().tolist()
         return indices
     
     def update(self):
@@ -159,12 +183,41 @@ class DynamicReteiever:
         return sample_list[least_similar_index], similarities[least_similar_index].item()
 
     def update_online(self,query_sample):
+        if self.args.dataset_mode == "balanced":
+            device_set = "cuda:" + str(self.args.device)
+            device = torch.device(device_set)
+            label = query_sample.label
+            
+            # 获取当前类别的样本列表
+            sample_list = self.label2sample[label]
+            # 获取当前类别的原型向量
+            current_prototype = self.label_to_prototype[label] #(256,1024)
+            current_prototype = current_prototype.to(device)
+        
+            embeddings = torch.stack([s.embed for s in sample_list])
+            embeddings = embeddings.to(device)
+
+            # 计算每个样本与原型的余弦相似度
+            # embeddings 和 current_prototype 的维度匹配为 (N, 64, 1024) 和 (1，64, 1024)
+            similarities = F.cosine_similarity(embeddings, current_prototype.unsqueeze(0), dim=-1)
+           
+            #mean_similarities = similarities.mean(dim=-1)  # (N,)
+            least_similar_index = torch.argmin(similarities).cpu().item()
+
+            target_sample = sample_list[least_similar_index]
+
         if self.args.update_strategy == "gradient_prototype":
             self.update_based_on_gradient_and_prototype(query_sample)
         elif self.args.update_strategy == "time_decay":
             self.update_prototype_with_time_decay(query_sample)
-        elif self.args.update_strategy == "fixed_gradient":
-            self.update_based_on_fixed_gradient(query_sample,gradient =self.args.gradient)
+        elif self.args.update_strategy == "fixed":
+            self.update_based_on_fixed(target_sample,query_sample)
+        elif self.args.update_strategy == "cyclic":
+            self.update_based_on_cyclic_momentum(target_sample,query_sample)
+        elif self.args.update_strategy == "multi_step":
+            self.update_based_on_multi_step(target_sample,query_sample)
+        elif self.args.update_strategy == "new":
+            self.update_based_on_new(query_sample)
         else:
             print("update_strategy is not effective.")
             return
@@ -196,25 +249,6 @@ class DynamicReteiever:
         self.class_gradients[sample.label].append(support_gradient)
 
         return support_gradient
-
-    def compute_cyclic(self, timestep, gradient, beta_max=0.8, beta_min=0.2, cycle_length=1000):
-        """
-        计算周期性动量系数 beta 随着时间步周期性变化
-        :param timestep: 当前推理的时间步
-        :param sample_quality: 样本质量（假设是 0 到 1 之间的浮点数）
-        :param beta_max: 动量的最大值
-        :param beta_min: 动量的最小值
-        :param cycle_length: 动量变化的周期长度
-        :return: 动态调整后的 beta 值
-        """
-        cycle_position = timestep % cycle_length
-        beta_t = beta_min + 0.5 * (beta_max - beta_min) * (1 + math.cos(2 * math.pi * cycle_position / cycle_length))
-        return beta_t * gradient
-
-    def compute_cyclic_beta(self, timestep, beta_max=0.9, beta_min=0.1, cycle_length=1000):
-        cycle_position = timestep % cycle_length
-        beta_t = beta_min + 0.5 * (beta_max - beta_min) * (1 + math.cos(2 * math.pi * cycle_position / cycle_length))
-        return beta_t
     
     def update_based_on_gradient_and_prototype(self,query_sample):  #  alpha = 0.4,beta = 0.5,delta=0.1 :63.22
         query_embed = query_sample.embed
@@ -280,81 +314,72 @@ class DynamicReteiever:
         # 更新时间步
         self.timestep += 1
     
-    def update_based_on_fixed_gradient(self,query_sample,gradient): 
-        query_embed = query_sample.embed
+    def update_based_on_fixed(self,target_sample,query_sample,gradient=0.2):   
+         # 获取当前类别的样本列表
         label = query_sample.label
-        # 计算 Support Gradient
-        support_gradient = gradient
-        
-        # 获取当前类别的样本列表
         sample_list = self.label2sample[label]
-        # 获取当前类别的原型向量
-        current_prototype = self.label_to_prototype[label]
 
-        # 找到当前类别中最不相似的样本（与原型相距最远的样本）
-        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
-        least_similar_index = torch.argmin(similarities).item()
-
-        least_similar_sample = sample_list[least_similar_index]
-        least_similar_sample.embed = (1 - support_gradient) * least_similar_sample.embed + support_gradient * query_embed
-        # 更新类别原型
-        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
-            
+        target_sample.embed = (1 - gradient) * target_sample.embed + gradient * query_sample.embed
+        #target_sample.feature_256_1024 = (1 - gradient) * target_sample.feature_256_1024 + gradient * query_sample.feature_256_1024
     
-    def update_based_on_cyclic_momentum(self, query_sample):
-        query_embed = query_sample.embed
-        label = query_sample.label
-        inference_result = 1 if query_sample.pseudo_label == label else 0
-        # 更新该类别的推理历史记录
-        self.error_history[label].append(1 - inference_result)  # 记录错误推理
+        # 更新类别原型
+        self.label_to_prototype[query_sample.label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+        # 更新该类别的原型为新特征的平均值
+        # self.label_to_prototype[label] = torch.mean(
+        #     torch.stack([s.feature_256_1024 for s in sample_list]), dim=0
+        # )
 
-        # 获取当前类别的样本列表
-        sample_list = self.label2sample[label]
-        # 获取当前类别的原型向量
-        current_prototype = self.label_to_prototype[label]
-
-        # 计算与原型的相似度，找到最不相似的样本
-        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
-        least_similar_index = torch.argmin(similarities).item()
-        target_sample = sample_list[least_similar_index]
-
-        gradient = self.compute_gradient(query_sample,self.args.alpha,self.args.beta,self.args.delta)
-
-        current_lr = self.compute_cyclic(self.timestep,gradient)
+    def update_based_on_cyclic_momentum(self, target_sample,query_sample):
+        sample_list = self.label2sample[query_sample.label]
+        current_lr = self.compute_cyclic_beta(self.timestep,cycle_length=self.args.M)
         
-        target_sample.embed = (1 - current_lr) * target_sample.embed + current_lr * query_embed
+        target_sample.embed = (1 - current_lr) * target_sample.embed + current_lr * query_sample.embed
 
         # 更新类别原型
-        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+        self.label_to_prototype[query_sample.label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
 
         # 更新时间步
         self.timestep += 1
 
-    def update_based_on_cyclic_momentum_pure(self, query_sample):
-        query_embed = query_sample.embed
-        label = query_sample.label
-        inference_result = 1 if query_sample.pseudo_label == label else 0
-        # 更新该类别的推理历史记录
-        self.error_history[label].append(1 - inference_result)  # 记录错误推理
+    def compute_cyclic_beta(self, timestep, beta_max=0.8, beta_min=0.2, cycle_length=1000):
+        cycle_position = timestep % cycle_length
+        beta_t = beta_min + 0.5 * (beta_max - beta_min) * (1 + math.cos(2 * math.pi * cycle_position / cycle_length))
+        return beta_t
 
-        # 获取当前类别的样本列表
-        sample_list = self.label2sample[label]
-        # 获取当前类别的原型向量
-        current_prototype = self.label_to_prototype[label]
-
-        # 计算与原型的相似度，找到最不相似的样本
-        similarities = torch.cosine_similarity(torch.stack([s.embed for s in sample_list]), current_prototype.unsqueeze(0))
-        least_similar_index = torch.argmin(similarities).item()
-        target_sample = sample_list[least_similar_index]
-
-        current_lr = self.compute_cyclic_beta(self.timestep)
+    def update_based_on_multi_step(self, target_sample,query_sample,num_steps=5, delta=0.1):
+        sample_list = self.label2sample[query_sample.label]
+        for _ in range(num_steps):
+            target_sample.embed = target_sample.embed + delta * (query_sample.embed - target_sample.embed)
         
-        target_sample.embed = (1 - current_lr) * target_sample.embed + current_lr * query_embed
-
         # 更新类别原型
-        self.label_to_prototype[label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
+        self.label_to_prototype[query_sample.label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
 
-        # 更新时间步
-        self.timestep += 1
+    
+    def update_based_on_new(self,query_sample):
+        updated_labels = set()
+        # self.dismatch_pool中的样本是一定要更新的，把embed靠近所属类的prototype
+        for d in self.dismatch_pool:
+            p = self.label_to_prototype[d.label]
 
-        
+            # 靠近p
+            d.embed = 0.9 * d.embed + 0.1 * p
+            updated_labels.add(d.label)  # 记录该样本的类别标签，表示其 prototype 需要更新
+
+        # 对于self.match_pool中的样本，如果预测结果对了，不需要更新
+        if query_sample.label == query_sample.pseudo_label:
+            pass
+        else: # 否则用数据流更新match pool 中的样本
+            for m in self.match_pool:
+                m.embed  =0.9*m.embed+ 0.1*query_sample.embed
+                updated_labels.add(m.label)
+
+        # 更新已记录的每个类别标签的 prototype
+        for label in updated_labels:
+            # 获取当前类别的所有样本的 embed
+            sample_embeds = [s.embed for s in self.label2sample[label]]
+            # 计算新的 prototype 为该类别中所有样本的平均 embed
+            self.label_to_prototype[label] = torch.mean(torch.stack(sample_embeds), dim=0)
+
+        # 更新结束后，两个pool 清空
+        self.match_pool = []
+        self.dismatch_pool = []

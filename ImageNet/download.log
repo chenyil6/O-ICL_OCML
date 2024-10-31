@@ -1,0 +1,74 @@
+nohup: ignoring input
+********** Start downloading openai/clip-vit-large-patch14 **********
+Traceback (most recent call last):
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/connection.py", line 196, in _new_conn
+    sock = connection.create_connection(
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/util/connection.py", line 85, in create_connection
+    raise err
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/util/connection.py", line 73, in create_connection
+    sock.connect(sa)
+OSError: [Errno 101] Network is unreachable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/connectionpool.py", line 789, in urlopen
+    response = self._make_request(
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/connectionpool.py", line 490, in _make_request
+    raise new_e
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/connectionpool.py", line 466, in _make_request
+    self._validate_conn(conn)
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/connectionpool.py", line 1095, in _validate_conn
+    conn.connect()
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/connection.py", line 615, in connect
+    self.sock = sock = self._new_conn()
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/connection.py", line 211, in _new_conn
+    raise NewConnectionError(
+urllib3.exceptions.NewConnectionError: <urllib3.connection.HTTPSConnection object at 0x7f6b14cc0550>: Failed to establish a new connection: [Errno 101] Network is unreachable
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/requests/adapters.py", line 667, in send
+    resp = conn.urlopen(
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/connectionpool.py", line 843, in urlopen
+    retries = retries.increment(
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/urllib3/util/retry.py", line 519, in increment
+    raise MaxRetryError(_pool, url, reason) from reason  # type: ignore[arg-type]
+urllib3.exceptions.MaxRetryError: HTTPSConnectionPool(host='huggingface.co', port=443): Max retries exceeded with url: /api/models/openai/clip-vit-large-patch14/revision/main (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f6b14cc0550>: Failed to establish a new connection: [Errno 101] Network is unreachable'))
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/chy63/.local/lib/python3.9/site-packages/huggingface_hub/_snapshot_download.py", line 164, in snapshot_download
+    repo_info = api.repo_info(repo_id=repo_id, repo_type=repo_type, revision=revision, token=token)
+  File "/home/chy63/.local/lib/python3.9/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/home/chy63/.local/lib/python3.9/site-packages/huggingface_hub/hf_api.py", line 2491, in repo_info
+    return method(
+  File "/home/chy63/.local/lib/python3.9/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/home/chy63/.local/lib/python3.9/site-packages/huggingface_hub/hf_api.py", line 2300, in model_info
+    r = get_session().get(path, headers=headers, timeout=timeout, params=params)
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/requests/sessions.py", line 602, in get
+    return self.request("GET", url, **kwargs)
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/requests/sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "/home/chy63/.local/lib/python3.9/site-packages/huggingface_hub/utils/_http.py", line 66, in send
+    return super().send(request, *args, **kwargs)
+  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/requests/adapters.py", line 700, in send
+    raise ConnectionError(e, request=request)
+requests.exceptions.ConnectionError: (MaxRetryError("HTTPSConnectionPool(host='huggingface.co', port=443): Max retries exceeded with url: /api/models/openai/clip-vit-large-patch14/revision/main (Caused by NewConnectionError('<urllib3.connection.HTTPSConnection object at 0x7f6b14cc0550>: Failed to establish a new connection: [Errno 101] Network is unreachable'))"), '(Request ID: 4435a29a-5b91-435e-afc6-6acee831e89b)')
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/data/chy/online/ImageNet/download.py", line 14, in <module>
+    snapshot_download(repo_id=model_name,
+  File "/home/chy63/.local/lib/python3.9/site-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/home/chy63/.local/lib/python3.9/site-packages/huggingface_hub/_snapshot_download.py", line 236, in snapshot_download
+    raise LocalEntryNotFoundError(
+huggingface_hub.utils._errors.LocalEntryNotFoundError: An error happened while trying to locate the files on the Hub and we cannot find the appropriate snapshot folder for the specified revision on the local disk. Please check your internet connection and try again.

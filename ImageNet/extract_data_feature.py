@@ -9,17 +9,17 @@ device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 # load clip model and processor
 embedding_model = CLIPModel.from_pretrained(
-    '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32', 
+    '/data1/chy/clip-vit-large-patch14', 
     local_files_only=True
 ).to(device)
 
 image_processor = AutoProcessor.from_pretrained(
-    '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32', 
+    '/data1/chy/clip-vit-large-patch14', 
     local_files_only=True
 )
 
 text_tokenizer = AutoTokenizer.from_pretrained(
-    '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32', 
+    '/data1/chy/clip-vit-large-patch14', 
     local_files_only=True
 )
 
@@ -71,7 +71,7 @@ print(f"the len of use_train_data(support set + data stream) is {len(use_train_d
 for sample in tqdm(use_train_data, desc="Processing train dataset"):
     preprocess_train(sample)
 
-with open('./train_idx2embed_quality.pkl', 'wb') as f:
+with open('./train_idx2embed_quality_clip14.pkl', 'wb') as f:
     pickle.dump(features_data, f)
 
 print("train data features are stored...")
@@ -91,7 +91,7 @@ def preprocess_val(sample):
 for data in tqdm(test_dataset, desc="Processing test dataset"):
     preprocess_val(data)
 
-with open('./val_idx2embed.pkl', 'wb') as f:
+with open('./val_idx2embed_clip14.pkl', 'wb') as f:
     pickle.dump(features_data_val, f)
 
 print("val data features are stored...")

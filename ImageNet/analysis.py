@@ -1,9 +1,8 @@
 import pickle
 
-# 加载索引文件
-with open("./imagenet_class_indices.pkl", "rb") as f:
-    class_indices = pickle.load(f)
+features_data_val_64_1024 = pickle.load(open("/data/chy/feacture_cache/val_features_64x1024.pkl", 'rb'))
+features_data_val_256_1024 = pickle.load(open("/data/chy/feacture_cache/val_features_256x1024.pkl", 'rb'))
 
-# 打印其中一部分数据进行验证
-for class_id, indices in list(class_indices.items())[:5]:  # 打印前5个类的信息
-    print(f"Class ID: {class_id}, Number of images: {len(indices)}, Sample indices: {indices[:5]}")
+print(features_data_val_64_1024[0].shape) #torch.Size([64, 1024])
+print(features_data_val_256_1024[0].shape) # torch.Size([256, 1024])
+

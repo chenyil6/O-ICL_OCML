@@ -1,0 +1,36 @@
+nohup: ignoring input
+/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/torchvision/datapoints/__init__.py:12: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/torchvision/transforms/v2/__init__.py:54: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
+  warnings.warn(_BETA_TRANSFORMS_WARNING)
+Loading checkpoint shards:   0%|          | 0/7 [00:00<?, ?it/s]Loading checkpoint shards:  14%|█▍        | 1/7 [00:01<00:07,  1.28s/it]Loading checkpoint shards:  29%|██▊       | 2/7 [00:02<00:05,  1.18s/it]Loading checkpoint shards:  43%|████▎     | 3/7 [00:03<00:04,  1.07s/it]Loading checkpoint shards:  57%|█████▋    | 4/7 [00:04<00:02,  1.00it/s]Loading checkpoint shards:  71%|███████▏  | 5/7 [00:05<00:01,  1.05it/s]Loading checkpoint shards:  86%|████████▌ | 6/7 [00:05<00:00,  1.11it/s]Loading checkpoint shards: 100%|██████████| 7/7 [00:06<00:00,  1.19it/s]Loading checkpoint shards: 100%|██████████| 7/7 [00:06<00:00,  1.06it/s]
+Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. Default to no truncation.
+From v4.47 onwards, when a model cache is to be returned, `generate` will return a `Cache` instance instead by default (as opposed to the legacy tuple of tuples format). If you want to keep returning the legacy format, please set `return_legacy_cache=True`.
+IndexError encountered at position 7 with ct[i]=28731 and token=28731: tuple index out of range
+IndexError encountered at position 7 with ct[i]=305 and token=305: tuple index out of range
+IndexError encountered at position 7 with ct[i]=305 and token=305: tuple index out of range
+IndexError encountered at position 7 with ct[i]=24342 and token=24342: tuple index out of range
+IndexError encountered at position 7 with ct[i]=487 and token=487: tuple index out of range
+IndexError encountered at position 7 with ct[i]=28711 and token=28711: tuple index out of range
+IndexError encountered at position 7 with ct[i]=28711 and token=28711: tuple index out of range
+IndexError encountered at position 7 with ct[i]=12408 and token=12408: tuple index out of range
+IndexError encountered at position 7 with ct[i]=457 and token=457: tuple index out of range
+predicted_classnames: ['great white shark', 'hammerhead shark']
+predicted_probs: [0.9442572593688965, 0.0373644083738327]
+probs_tensor: tensor([5.0288e-06, 5.9663e-06, 9.4426e-01, 1.7415e-02, 3.7364e-02, 5.4437e-06,
+        7.0208e-06, 1.0922e-06, 6.1564e-07, 4.7677e-06, 3.1960e-06, 1.0315e-05,
+        1.5878e-05, 2.8255e-06, 5.1298e-06, 6.9879e-06, 3.0375e-06, 3.3994e-06,
+        2.1676e-06, 5.2436e-06, 1.0594e-05, 0.0000e+00, 9.2981e-06, 1.6915e-06,
+        7.1161e-05, 7.5908e-06, 1.3938e-05, 7.0426e-06, 1.4044e-05, 5.1807e-06,
+        2.1194e-05, 1.2115e-05, 1.8062e-05, 6.6706e-05, 3.8237e-05, 6.5354e-06,
+        1.3077e-05, 5.6751e-06, 4.0378e-05, 1.1235e-05, 4.8224e-06, 0.0000e+00,
+        2.9172e-06, 0.0000e+00, 9.4814e-06, 4.0096e-06, 3.0059e-05, 6.4459e-06,
+        2.9515e-06, 5.9994e-06, 1.2313e-05, 1.1900e-06, 7.3671e-06, 8.2470e-05,
+        0.0000e+00, 5.4451e-05, 7.2501e-06, 8.5205e-06, 7.4499e-06, 3.9320e-06,
+        9.5882e-06, 1.3756e-05, 1.6898e-05, 1.4479e-06, 3.5888e-06, 8.4329e-06,
+        0.0000e+00, 0.0000e+00, 0.0000e+00, 2.0355e-06, 1.1153e-05, 2.6071e-06,
+        6.7461e-06, 9.2023e-06, 1.1071e-05, 1.9903e-05, 4.4853e-06, 1.6811e-05,
+        1.2404e-07, 6.5729e-07, 3.9507e-06, 6.5465e-07, 1.8165e-05, 9.1858e-06,
+        4.4707e-06, 2.6281e-06, 1.9958e-06, 9.7431e-06, 3.6526e-06, 0.0000e+00,
+        5.6724e-06, 2.1778e-06, 1.9928e-05, 1.2030e-05, 3.3082e-06, 4.6313e-06,
+        7.2926e-06, 2.0104e-07, 0.0000e+00, 1.1055e-06])

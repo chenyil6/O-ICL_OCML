@@ -1,40 +1,40 @@
-import torch
-from transformers import  AutoProcessor,IdeficsForVisionText2Text
-from PIL import Image
 import requests
+import torch
+from PIL import Image
+from io import BytesIO
 from ImageNet.classification_utils import IMAGENET_1K_CLASS_ID_TO_LABEL,IMAGENET_CLASSNAMES_100
 
+from transformers import AutoProcessor, AutoModelForVision2Seq
+from transformers.image_utils import load_image
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# Note that passing the image urls (instead of the actual pil images) to the processor is also possible
+demo_image_one = Image.open("/data/hyh/imagenet/data/val/n01440764/ILSVRC2012_val_00000293.JPEG") # tench
 
-checkpoint = "/data1/pyz/model_weight/idefics-9b"
-model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16).to(device)
-processor = AutoProcessor.from_pretrained(checkpoint)
+demo_image_two = Image.open("/data/hyh/imagenet/data/val/n01443537/ILSVRC2012_val_00000236.JPEG") # gold fish
 
-demo_image_one = Image.open("/data/hyh/imagenet/data/val/n01440764/ILSVRC2012_val_00000293.JPEG")
+query_image = Image.open("/data/hyh/imagenet/data/val/n01484850/ILSVRC2012_val_00002338.JPEG") # great_white_shark
 
-query_image = Image.open("/data/hyh/imagenet/data/val/n01443537/ILSVRC2012_val_00000236.JPEG")
 
-demo_image_two = Image.open("/data/hyh/imagenet/data/val/n01484850/ILSVRC2012_val_00002338.JPEG")
 
-prompt = ["User:",
-           demo_image_one,
-           "category: tench.\n",
-           "User:",
-           demo_image_two,
-           "category:great white shark.\n"
-           "User:",
-           query_image,
-           "category:"
-           ]
+processor = AutoProcessor.from_pretrained("/data1/pyz/model_weight/idefics2-8b-base")
+model = AutoModelForVision2Seq.from_pretrained("/data1/pyz/model_weight/idefics2-8b-base", device_map="auto")
 
-inputs = processor(prompt, return_tensors="pt").to("cuda")
-bad_words_ids = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
+BAD_WORDS_IDS = processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
+EOS_WORDS_IDS = [processor.tokenizer.eos_token_id]
 
-outputs = model.generate(**inputs, max_new_tokens=20, bad_words_ids=bad_words_ids,num_beams=1,length_penalty=1.0,
+# Create inputs
+prompts = [
+    "<image> category:tench.<image>category:goldfish.<image> category:",  
+]
+images = [demo_image_one, demo_image_two,query_image]
+
+inputs = processor(images=images, text=prompts, padding=True, truncation=True, return_tensors="pt").to("cuda")
+
+
+outputs = model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS,min_new_tokens=1, max_new_tokens=20,num_beams=1,
+    length_penalty=1.0,
     output_scores=True,
     return_dict_in_generate=True)
-
 
 classnames_tokens = processor.tokenizer(IMAGENET_CLASSNAMES_100)["input_ids"]
 
@@ -52,7 +52,7 @@ def get_topk_classifications(outputs, classnames_tokens, topk=2):
                 # Sum the log probabilities instead of multiplying probabilities
                 log_prob += log_scores[ct[i]]
             except IndexError as e:
-                print(f"IndexError encountered at position {i} with ct[i]={ct[i]} and token={ct[i]}: {str(e)}")
+                #print(f"IndexError encountered at position {i} with ct[i]={ct[i]} and token={ct[i]}: {str(e)}")
                 log_prob = -float('inf')
                 valid = False
                 break  # Exit the loop if there's an IndexError

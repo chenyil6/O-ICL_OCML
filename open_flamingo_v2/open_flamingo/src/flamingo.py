@@ -123,9 +123,10 @@ class Flamingo(nn.Module):
 
     def generate(
         self,
-        vision_x: torch.Tensor,
-        lang_x: torch.Tensor,
+        vision_x: torch.Tensor= None,
+        lang_x: torch.Tensor= None,
         attention_mask: torch.Tensor = None,
+        vision_features: torch.Tensor = None,
         **kwargs,
     ):
         num_beams = kwargs.pop("num_beams", 1)
@@ -133,7 +134,8 @@ class Flamingo(nn.Module):
             vision_x = vision_x.repeat_interleave(num_beams, dim=0)
 
         self.lang_encoder._use_cached_vision_x = True
-        self._encode_vision_x(vision_x=vision_x)
+        #self._encode_vision_x(vision_x=vision_x)
+        self._encode_vision_x_modified(vision_x=vision_x,vision_features=vision_features)
         eos_token_id = kwargs.pop("eos_token_id", self.eoc_token_id)
         output = self.lang_encoder.generate(
             input_ids=lang_x,
@@ -146,6 +148,23 @@ class Flamingo(nn.Module):
         self.lang_encoder.clear_conditioned_layers()
         self.lang_encoder._use_cached_vision_x = False
         return output
+
+    def _encode_vision_x_modified(self, vision_x: torch.Tensor=None,vision_features: torch.Tensor = None):
+        if vision_features is None:
+            assert vision_x.ndim == 6, "vision_x should be of shape (b, T_img, F, C, H, W)"
+            b, T, F = vision_x.shape[:3]
+            assert F == 1, "Only single frame supported"
+
+            vision_x = rearrange(vision_x, "b T F c h w -> (b T F) c h w")
+            with torch.no_grad():
+                vision_x = self.vision_encoder(vision_x)[1]
+            vision_x = rearrange(vision_x, "(b T F) v d -> b T F v d", b=b, T=T, F=F)
+            vision_x = self.perceiver(vision_x)
+        else:
+            vision_x = vision_features # " b T F v d"
+            vision_x = self.perceiver(vision_x) # " b T v d"
+        for layer in self.lang_encoder._get_decoder_layers():
+            layer.condition_vis_x(vision_x)
 
     def _encode_vision_x(self, vision_x: torch.Tensor):
         """
@@ -168,7 +187,6 @@ class Flamingo(nn.Module):
             vision_x = self.vision_encoder(vision_x)[1]
         vision_x = rearrange(vision_x, "(b T F) v d -> b T F v d", b=b, T=T, F=F)
         vision_x = self.perceiver(vision_x)
-
         for layer in self.lang_encoder._get_decoder_layers():
             layer.condition_vis_x(vision_x)
 

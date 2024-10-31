@@ -33,8 +33,9 @@ demo_image_one = Image.open("/data/hyh/imagenet/data/val/n01440764/ILSVRC2012_va
 
 demo_image_two = Image.open("/data/hyh/imagenet/data/val/n01443537/ILSVRC2012_val_00000236.JPEG")
 
-query_image = Image.open("/data/hyh/imagenet/data/val/n01484850/ILSVRC2012_val_00002338.JPEG")
+query_image = Image.open("/data/hyh/imagenet/data/val/n01484850/ILSVRC2012_val_00002338.JPEG") #great_white_shark
 
+print("image_processor(demo_image_one):",image_processor(demo_image_one).shape)
 vision_x = [image_processor(demo_image_one).unsqueeze(0), image_processor(demo_image_two).unsqueeze(0), image_processor(query_image).unsqueeze(0)]
 vision_x = torch.cat(vision_x, dim=0)
 vision_x = vision_x.unsqueeze(1).unsqueeze(0)
@@ -117,8 +118,5 @@ for idx,ct in enumerate(classnames_tokens):
 # 归一化类别概率
 overall_log_probs = overall_log_probs / overall_log_probs.sum()
     
-# 计算所有类别的总熵
-total_entropy = torch.sum(entropies).item()
 
 
-print("total_entropy :", total_entropy)

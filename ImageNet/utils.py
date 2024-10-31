@@ -117,7 +117,7 @@ def get_topk_classifications(outputs, classnames_tokens, topk=2):
 
 import torch
 
-def get_topk_classifications_batch(outputs, classnames_tokens, topk, class_id_to_name=None):
+def get_topk_classifications_batch(outputs, classnames_tokens, topk, class_id_to_name=IMAGENET_1K_CLASS_ID_TO_LABEL):
     """
     Computes the top-k classifications for a batch of samples.
 

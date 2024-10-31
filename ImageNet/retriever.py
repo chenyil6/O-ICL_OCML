@@ -197,11 +197,8 @@ class DynamicReteiever:
             embeddings = torch.stack([s.embed for s in sample_list])
             embeddings = embeddings.to(device)
 
-            # 计算每个样本与原型的余弦相似度
-            # embeddings 和 current_prototype 的维度匹配为 (N, 64, 1024) 和 (1，64, 1024)
             similarities = F.cosine_similarity(embeddings, current_prototype.unsqueeze(0), dim=-1)
            
-            #mean_similarities = similarities.mean(dim=-1)  # (N,)
             least_similar_index = torch.argmin(similarities).cpu().item()
 
             target_sample = sample_list[least_similar_index]
@@ -324,11 +321,7 @@ class DynamicReteiever:
     
         # 更新类别原型
         self.label_to_prototype[query_sample.label] = torch.mean(torch.stack([s.embed for s in sample_list]), dim=0)
-        # 更新该类别的原型为新特征的平均值
-        # self.label_to_prototype[label] = torch.mean(
-        #     torch.stack([s.feature_256_1024 for s in sample_list]), dim=0
-        # )
-
+        
     def update_based_on_cyclic_momentum(self, target_sample,query_sample):
         sample_list = self.label2sample[query_sample.label]
         current_lr = self.compute_cyclic_beta(self.timestep,cycle_length=self.args.M)

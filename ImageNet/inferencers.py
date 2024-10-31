@@ -599,10 +599,6 @@ class Online_ICL:
             batch_samples = [test_dataset[idx] for idx in batch_indices]
             self.inference_batch(batch_samples)
         
-        # 推理结束后将字典写入文件
-        with open("/data/chy/feacture_cache/test_idx2demon_idx.json", "w") as file:
-            json.dump(self.test_idx2demon_idx, file, indent=4)
-
         acc = self.right_sample_num / self.test_sample_num
         results["avg"] += acc
 
@@ -725,26 +721,19 @@ class FewShot:
                 None if no images in batch
         """
         images_per_example = max(len(x) for x in batch)  # 一个批量有多少图片
-        print(f'Number of examples in batch: {len(batch)}')
-        print(f'Max images per example: {images_per_example}')
         batch_images = None
         for iexample, example in enumerate(batch):
             for iimage, image in enumerate(example):
                 preprocessed = self.image_processor(image)
-                print("preprocessed:",preprocessed) # （3，224，224）
 
                 if batch_images is None:
                     batch_images = torch.zeros(
                         (len(batch), images_per_example, 1) + preprocessed.shape,
                         dtype=preprocessed.dtype,
                     )
-                    print(f'Initialized batch_images shape: {batch_images.shape}')  # (B, T_img, 1, C, H, W)
-
                 batch_images[iexample, iimage, 0] = preprocessed
         if batch_images is not None:
             batch_images = batch_images.to(self.device).half()
-            print(f'Final batch_images shape: {batch_images.shape}')  # torch.Size([4, 5, 1, 3, 224, 224])
-
         return batch_images
 
     def _prepare_text(

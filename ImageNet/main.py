@@ -9,19 +9,11 @@ from transformers import IdeficsForVisionText2Text, AutoProcessor
 import json
 import logging
 
-# 设置日志的基本配置
-logging.basicConfig(level=logging.INFO,  # 日志级别
-                    format='%(asctime)s - %(levelname)s - %(message)s',  # 日志格式
-                    handlers=[
-                        logging.FileHandler("try_batch.log"),  # 输出到文件
-                        logging.StreamHandler()  # 输出到控制台
-                    ])
-
 logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="0")
+    parser.add_argument("--device", type=str, default="3")
     parser.add_argument(
         "--model",
         type=str,
@@ -40,7 +32,7 @@ def get_args():
     parser.add_argument("--update_strategy", type=str, default="noUpdate") # noUpdate;multi_step;cyclic;fixed;imbalanced
     parser.add_argument("--M", type=int, default=1000) 
     parser.add_argument("--catergory_num", type=int, default=100) # 测100类 还是 1k类
-    parser.add_argument("--batch_size", type=int, default=4)
+    parser.add_argument("--batch_size", type=int, default=1)
     parser.add_argument("--gradient", type=float, default=0.2)
     arguments = parser.parse_args()
     return arguments

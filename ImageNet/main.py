@@ -71,27 +71,31 @@ if __name__ == "__main__":
         raise ValueError(f"Unsupported model type: {args.model}")
 
     # embedding model
-    embedding_model = CLIPModel.from_pretrained('/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
-    embedding_processor = AutoProcessor.from_pretrained(
-            '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
-    embedding_tokenizer = AutoTokenizer.from_pretrained(
-            '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
+    # embedding_model = CLIPModel.from_pretrained('/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
+    # embedding_processor = AutoProcessor.from_pretrained(
+    #         '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
+    # embedding_tokenizer = AutoTokenizer.from_pretrained(
+    #         '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
     print("load clip successfully...")
 
     if args.method == "Online_ICL":
         if args.model == "open_flamingo_9b":
-            inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device)
+            #inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device)
+            inferencer = Online_ICL(args, tokenizer, model, image_processor,device)
         elif args.model == "idefics_v2":
-            inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device,processor=processor)
+            #inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device,processor=processor)
+            inferencer = Online_ICL(args, tokenizer, model, image_processor,device,processor=processor)
         else:
             raise ValueError(f"Unsupported model type: {args.model}")
 
         results, predictions = inferencer.run()
     elif args.method == "FewShot":
         if args.model == "open_flamingo_9b":
-            inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
+            inferencer = Online_ICL(args, tokenizer, model, image_processor,device)
+            #inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
         elif args.model == "idefics_v2":
-            inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
+            inferencer = Online_ICL(args, tokenizer, model, image_processor,device,processor=processor)
+            #inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
         else:
             raise ValueError(f"Unsupported model type: {args.model}")
         

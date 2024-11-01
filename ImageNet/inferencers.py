@@ -47,7 +47,7 @@ class Online_ICL:
     2). inference:        inferencer.run()
     """
 
-    def __init__(self, args, tokenizer, model, image_processor,embedding_model, embedding_processor, embedding_tokenizer,device,processor=None):
+    def __init__(self, args, tokenizer, model, image_processor,embedding_model=None, embedding_processor=None, embedding_tokenizer=None,device='cuda',processor=None):
         self.args = args
         self.tokenizer = tokenizer
         self.model = model

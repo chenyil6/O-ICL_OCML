@@ -363,18 +363,18 @@ class Online_ICL:
             if demonstrations is not None:
                 for dm in demonstrations:
                     image_set.append(dm.image)
-                    prompt += f"Category:{dm.label}."
+                    prompt += f"<image>Category:{dm.label}."
             
             # Append the main sample image and category prompt
             image_set.append(sample.image)
-            prompt += "Category:"
+            prompt += "<image>Category:"
             
             # Collect prompts and images
             prompts.append(prompt)
             images.append(image_set)
 
-        BAD_WORDS_IDS = self.processor.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
-        EOS_WORDS_IDS = [self.processor.tokenizer.eos_token_id]
+        BAD_WORDS_IDS = self.tokenizer(["<image>", "<fake_token_around_image>"], add_special_tokens=False).input_ids
+        EOS_WORDS_IDS = [self.tokenizer.eos_token_id]
         
         inputs = self.processor(images=images, text=prompts, padding=True, truncation=True, return_tensors="pt").to("cuda")
        
@@ -405,7 +405,7 @@ class Online_ICL:
                     "gt_id": sample.class_id,
                     "pred_score": predicted_logprobs_batch[idx][0],
                     "gt_score": gt_label_confidence,
-                    "prompt_label": [dm.class_id for dm in demonstrations]
+                    "prompt_label": [dm.label for dm in demonstrations]
                 }
             )
             sample.pred_score = predicted_logprobs_batch[idx][0]
@@ -428,10 +428,8 @@ class Online_ICL:
         image = sample["image"]
         label = sample["class_name"]
         class_id = sample["class_id"]
-        feature_64_1024 = self.features_data_train_64_1024[idx]
-        feature_256_1024 = self.features_data_train_256_1024[idx]
         embed, quality = self.features_data_train[idx]
-        sample = Sample(idx, image, label, embed,feature_64_1024,feature_256_1024,quality,class_id, None,None,None,None)
+        sample = Sample(idx, image, label, embed,quality,class_id, None,None,None,None)
         return sample
     
     def preprocess_val(self, sample):
@@ -439,10 +437,8 @@ class Online_ICL:
         image = sample["image"]
         label = sample["class_name"]
         class_id = sample["class_id"]
-        feature_64_1024 = self.features_data_val_64_1024[idx]
-        feature_256_1024 = self.features_data_val_256_1024[idx]
         embed= self.features_data_val[idx]
-        sample = Sample(idx, image, label, embed,feature_64_1024,feature_256_1024,None,class_id, None,None,None,None)
+        sample = Sample(idx, image, label, embed,None,class_id, None,None,None,None)
         return sample
     
     def process_dict(self,sample):
@@ -452,7 +448,7 @@ class Online_ICL:
             self.retriever.label2sample[sample.label].append(sample)
 
     def _initialize_prototypes(self):
-        default_prototype_shape = (1, 768)
+        default_prototype_shape = (1, 512)
         default_zero_prototype = torch.zeros(default_prototype_shape)
         
         for label, samples in self.retriever.label2sample.items():

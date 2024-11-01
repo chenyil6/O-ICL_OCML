@@ -24,12 +24,12 @@ def get_args():
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
     parser.add_argument("--dataset_mode", type=str, default="balanced") # balanced;imbalanced;
     parser.add_argument("--result_folder", type=str, default="./result")
-    parser.add_argument("--method", type=str, default="FewShot")# FewShot;Online_ICL;
+    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL;
     parser.add_argument("--seed", type=int, default=42)     
     # Hyper parameters for OnlineICL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
     parser.add_argument("--dnum", type=int, default=4) 
-    parser.add_argument("--update_strategy", type=str, default="noUpdate") # noUpdate;multi_step;cyclic;fixed;imbalanced
+    parser.add_argument("--update_strategy", type=str, default="fixed") # noUpdate;multi_step;cyclic;fixed;imbalanced
     parser.add_argument("--M", type=int, default=1000) 
     parser.add_argument("--catergory_num", type=int, default=100) # 测100类 还是 1k类
     parser.add_argument("--batch_size", type=int, default=1)

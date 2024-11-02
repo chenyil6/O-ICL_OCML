@@ -23,7 +23,7 @@ def get_topk_classifications(outputs, classnames_tokens, topk=2):
                 # Sum the log probabilities instead of multiplying probabilities
                 log_prob += log_scores[ct[i]]
             except IndexError as e:
-                print(f"IndexError encountered at position {i} with ct[i]={ct[i]} and token={ct[i]}: {str(e)}")
+                #print(f"IndexError encountered at position {i} with ct[i]={ct[i]} and token={ct[i]}: {str(e)}")
                 log_prob = -float('inf')
                 valid = False
                 break  # Exit the loop if there's an IndexError
@@ -192,3 +192,4 @@ def get_predicted_classname(logprobs, k, class_id_to_name):
     predicted_logprobs = values.tolist()
 
     return predicted_classnames, predicted_logprobs
+

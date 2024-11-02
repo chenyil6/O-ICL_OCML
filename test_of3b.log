@@ -1,0 +1,5 @@
+nohup: ignoring input
+Traceback (most recent call last):
+  File "/data/chy/online/test_of3b.py", line 1, in <module>
+    from open_flamingo_v2 import create_model_and_transforms
+ImportError: cannot import name 'create_model_and_transforms' from 'open_flamingo_v2' (/data/chy/online/open_flamingo_v2/__init__.py)

@@ -1,9 +1,5 @@
 import dataclasses
 import retriever
-
-import importlib
-# 重新加载 retriever 模块以应用最新的更改
-importlib.reload(retriever)
 from retriever import DynamicReteiever
 from tqdm import tqdm
 import torch
@@ -13,7 +9,7 @@ from PIL import Image
 from classification_utils import IMAGENET_CLASSNAMES_100,IMAGENET_CLASSNAMES
 from torch.utils.data import Subset
 from typing import Optional
-from utils import get_topk_classifications,get_imagenet_prompt,get_topk_classifications_batch
+from utils import *
 import numpy as np
 import random
 import matplotlib.pyplot as plt
@@ -22,6 +18,7 @@ import json
 import pickle
 import logging
 from typing import List
+from idefics_utils import get_context,get_context_images
 
 
 logger = logging.getLogger(__name__)
@@ -63,6 +60,7 @@ class Online_ICL:
         self.retriever = DynamicReteiever(args)
         self.predictions = []
         self.topk = 1
+        self.no_kv_caching = False
         self.features_data_train = pickle.load(open("/data/chy/feacture_cache/train_idx2embed_quality.pkl", 'rb'))
         self.features_data_val = pickle.load(open("/data/chy/feacture_cache/val_idx2embed.pkl",'rb'))
         
@@ -87,19 +85,12 @@ class Online_ICL:
     
     def prepare_text(self,ice_text):
         self.tokenizer.padding_side = "left"  # For generation padding tokens should be on the left
-        lang_x = self.tokenizer(ice_text, return_tensors="pt", )
+        lang_x = self.tokenizer(ice_text, return_tensors="pt")
         lang_x = {k: v.to(self.device) for k, v in lang_x.items()}
         return lang_x
 
     def get_response_OFv2(self, sample):
         ice_img,ice_text,demonstrations = self.retriever.get_final_query(sample)
-
-        # 把demonstration分别放入两个pool
-        for dm in demonstrations:
-            if dm.label == sample.label:
-                self.retriever.match_pool.append(dm)
-            else:
-                self.retriever.dismatch_pool.append(dm)
 
         vision_x = self.prepare_image(ice_img)
         lang_x = self.prepare_text(ice_text)
@@ -169,11 +160,11 @@ class Online_ICL:
         inputs = self.processor(images=images, text=prompts, padding=True, truncation=True, return_tensors="pt").to("cuda")
        
         with torch.no_grad():
-            outputs = self.model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS,min_new_tokens=1, max_new_tokens=20,num_beams=1,
+            outputs = self.model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS,min_new_tokens=1, max_new_tokens=7,num_beams=1,
                         length_penalty=1.0,
                         output_scores=True,
                         return_dict_in_generate=True)
-
+        
         classnames_tokens = self.tokenizer(
             self.all_class_names
         )["input_ids"]
@@ -201,6 +192,7 @@ class Online_ICL:
                 "margin":margin,
             }
         )
+
         sample.pred_score = predicted_logprobs[0]
         sample.pseudo_label = predicted_classnames[0]
         sample.gt_score = gt_label_confidence 
@@ -209,7 +201,7 @@ class Online_ICL:
     def inference(self, sample):
         sample = self.preprocess_train(sample)
         self.test_sample_num += 1
-        if self.args.model == "open_flamingo":
+        if self.args.model == "open_flamingo_9b" or self.args.model == "open_flamingo_3b":
             self.get_response_OFv2(sample)
         if self.args.model == "idefics_v2":
             self.get_response_ideficsv1(sample)
@@ -350,7 +342,7 @@ class Online_ICL:
             return input_ids, attention_mask
 
     def evaluate_batch_on_idev2(self,batch_samples):
-        # Prepare prompts and image sets for batch processing
+       # Prepare prompts and image sets for batch processing
         prompts = []
         images = []
         
@@ -379,7 +371,7 @@ class Online_ICL:
         inputs = self.processor(images=images, text=prompts, padding=True, truncation=True, return_tensors="pt").to("cuda")
        
         with torch.no_grad():
-            outputs = self.model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS,min_new_tokens=1, max_new_tokens=20,num_beams=1,
+            outputs = self.model.generate(**inputs, bad_words_ids=BAD_WORDS_IDS,min_new_tokens=1, max_new_tokens=7,num_beams=1,
                         length_penalty=1.0,
                         output_scores=True,
                         return_dict_in_generate=True)
@@ -415,7 +407,7 @@ class Online_ICL:
     def inference_batch(self,batch_samples):
         batch_samples = [self.preprocess_val(sample) for sample in batch_samples]
         self.test_sample_num += len(batch_samples)
-        if self.args.model == "open_flamingo_9b":
+        if self.args.model == "open_flamingo_9b" or self.args.model == "open_flamingo_3b":
             self.evaluate_batch_on_OFv2(batch_samples)
         if self.args.model == "idefics_v2":
             self.evaluate_batch_on_idev2(batch_samples)
@@ -576,9 +568,9 @@ class Online_ICL:
         pbar = tqdm(total=total_samples, desc="Using sample pool to update the support set")
         while sample_pool:  # 当 sample_pool 不为空时继续循环
             sample = sample_pool.pop()
-            #self.inference(sample)
-            sample = self.preprocess_train(sample)
-            self.retriever.update_online(sample)
+            self.inference(sample)
+            # sample = self.preprocess_train(sample)
+            # self.retriever.update_online(sample)
             del sample
             pbar.update(1)  # 每处理一个样本，更新进度条
 
@@ -621,6 +613,7 @@ class FewShot:
         self.all_class_names = IMAGENET_CLASSNAMES_100
         self.retriever = DynamicReteiever(args)
         self.predictions = []
+        self.no_kv_caching = False
         self.topk = 1       
         self.features_data_train = pickle.load(open("/data/chy/feacture_cache/train_idx2embed_quality.pkl", 'rb'))
         self.features_data_val = pickle.load(open("/data/chy/feacture_cache/val_idx2embed.pkl",'rb'))
@@ -630,6 +623,7 @@ class FewShot:
         with torch.no_grad():
             image_features = self.embedding_model.get_image_features(**inputs)
         return image_features
+
 
     def evaluate_batch_on_OFv2(self, batch_samples):
         batch_images = []
@@ -761,27 +755,17 @@ class FewShot:
             input_ids = input_ids.to(self.device)
             attention_mask = attention_mask.to(self.device)
             return input_ids, attention_mask
-
+    
     def inference_batch(self,batch_samples):
         batch_samples = [self.preprocess_val(sample) for sample in batch_samples]
         self.test_sample_num += len(batch_samples)
-        if self.args.model == "open_flamingo_9b":
+        if self.args.model == "open_flamingo_9b" or self.args.model == "open_flamingo_3b":
             self.evaluate_batch_on_OFv2(batch_samples)
         elif self.args.model == "idefics_v2":
             self.evaluate_batch_on_idev2(batch_samples)
         for sample in batch_samples:
             if sample.pseudo_label == sample.label:
                 self.right_sample_num += 1
-
-    def inference(self, sample):
-        sample = self.preprocess_train(sample)
-        self.test_sample_num += 1
-        if self.args.model == "open_flamingo_9b":
-            self.get_response_OFv2(sample)
-        if self.args.model == "idefics_v2":
-            self.get_response_ideficsv2(sample)
-        if sample.pseudo_label == sample.label:
-            self.right_sample_num += 1
 
     def evaluate_batch_on_idev2(self,batch_samples):
         # Prepare prompts and image sets for batch processing
@@ -905,6 +889,9 @@ class FewShot:
         self.test_sample_num = 0
         self.right_sample_num = 0
         
+        # for idx in tqdm(range(0, len(test_dataset)), desc=f"Inference ImageNet..."):
+        #     self.inference(test_dataset[idx])
+
         batch_size = self.args.batch_size  
 
         for i in tqdm(range(0, len(test_dataset), batch_size), desc=f"Inference ImageNet..."):

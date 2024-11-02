@@ -10,12 +10,41 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 checkpoint = "/data1/pyz/model_weight/idefics-9b"
 model = IdeficsForVisionText2Text.from_pretrained(checkpoint, torch_dtype=torch.bfloat16).to(device)
 processor = AutoProcessor.from_pretrained(checkpoint)
+model.eval()
+# 检查是否存在 `_encode_vision_x` 方法
+if hasattr(model, '_encode_vision_x'):
+    print("The model has the '_encode_vision_x' function.")
+else:
+    print("The model does NOT have the '_encode_vision_x' function.")
+
+# 可选：打印出模型的所有方法和属性，便于进一步检查
+print("Model methods and attributes:")
+print(dir(model))
+
 
 demo_image_one = Image.open("/data/hyh/imagenet/data/val/n01440764/ILSVRC2012_val_00000293.JPEG")
 
 query_image = Image.open("/data/hyh/imagenet/data/val/n01443537/ILSVRC2012_val_00000236.JPEG")
 
 demo_image_two = Image.open("/data/hyh/imagenet/data/val/n01484850/ILSVRC2012_val_00002338.JPEG")
+
+def get_context_images(image_processor, in_context_samples, num_shots=3):
+    if num_shots > 0:
+        context_images = [
+            image_processor(s).unsqueeze(0) for s in in_context_samples
+        ]
+        context_images = torch.cat(context_images, dim=0)
+        context_images = context_images.unsqueeze(1).unsqueeze(0)
+    else:
+        context_images = None
+    return context_images
+
+
+context_images = get_context_images(processor.image_processor,[demo_image_one,query_image,demo_image_two])
+
+batch_images = context_images.to(device).half()
+model._encode_vision_x(vision_x=batch_images)
+
 
 prompt = ["User:",
            demo_image_one,

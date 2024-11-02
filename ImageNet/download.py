@@ -3,8 +3,8 @@ import shutil
 from huggingface_hub import snapshot_download
 
 # 直接指定模型和下载路径
-model_name = 'openai/clip-vit-large-patch14'
-download_path = '/data1/chy/clip-vit-large-patch14'
+model_name = 'luodian/OTTER-9B-LA-InContext'
+download_path = '/data1/chy/OTTER-9B-LA-InContext'
 
 # 确保下载路径存在
 os.makedirs(download_path, exist_ok=True)

@@ -3,7 +3,6 @@ from inferencers import *
 import logging
 from transformers import AutoTokenizer, CLIPModel,AutoProcessor, AutoModelForVision2Seq
 import sys
-#sys.path.append('/data/xx/online')
 from open_flamingo_v2.open_flamingo.src.factory import create_model_and_transforms
 from transformers import IdeficsForVisionText2Text, AutoProcessor
 import json

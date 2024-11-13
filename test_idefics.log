@@ -1,30 +1,0 @@
-nohup: ignoring input
-/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/torchvision/datapoints/__init__.py:12: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
-  warnings.warn(_BETA_TRANSFORMS_WARNING)
-/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/torchvision/transforms/v2/__init__.py:54: UserWarning: The torchvision.datapoints and torchvision.transforms.v2 namespaces are still Beta. While we do not expect major breaking changes, some APIs may still change according to user feedback. Please submit any feedback you may have in this issue: https://github.com/pytorch/vision/issues/6753, and you can also check out https://github.com/pytorch/vision/issues/7319 to learn more about the APIs that we suspect might involve future changes. You can silence this warning by calling torchvision.disable_beta_transforms_warning().
-  warnings.warn(_BETA_TRANSFORMS_WARNING)
-Instantiating IdeficsAttention without passing a `layer_idx` is not recommended and will lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` when creating this class.
-Loading checkpoint shards:   0%|          | 0/19 [00:00<?, ?it/s]Loading checkpoint shards:   5%|▌         | 1/19 [00:00<00:04,  3.64it/s]Loading checkpoint shards:  11%|█         | 2/19 [00:00<00:04,  3.66it/s]Loading checkpoint shards:  16%|█▌        | 3/19 [00:00<00:03,  4.30it/s]Loading checkpoint shards:  21%|██        | 4/19 [00:00<00:03,  4.75it/s]Loading checkpoint shards:  26%|██▋       | 5/19 [00:01<00:02,  5.23it/s]Loading checkpoint shards:  32%|███▏      | 6/19 [00:01<00:02,  5.58it/s]Loading checkpoint shards:  37%|███▋      | 7/19 [00:01<00:02,  5.87it/s]Loading checkpoint shards:  42%|████▏     | 8/19 [00:01<00:01,  6.05it/s]Loading checkpoint shards:  47%|████▋     | 9/19 [00:01<00:01,  6.17it/s]Loading checkpoint shards:  53%|█████▎    | 10/19 [00:01<00:01,  6.27it/s]Loading checkpoint shards:  58%|█████▊    | 11/19 [00:01<00:01,  6.30it/s]Loading checkpoint shards:  63%|██████▎   | 12/19 [00:02<00:01,  6.34it/s]Loading checkpoint shards:  68%|██████▊   | 13/19 [00:02<00:00,  6.43it/s]Loading checkpoint shards:  74%|███████▎  | 14/19 [00:02<00:00,  6.49it/s]Loading checkpoint shards:  79%|███████▉  | 15/19 [00:02<00:00,  6.56it/s]Loading checkpoint shards:  84%|████████▍ | 16/19 [00:02<00:00,  6.54it/s]Loading checkpoint shards:  89%|████████▉ | 17/19 [00:02<00:00,  6.50it/s]Loading checkpoint shards:  95%|█████████▍| 18/19 [00:03<00:00,  6.51it/s]Loading checkpoint shards: 100%|██████████| 19/19 [00:03<00:00,  6.02it/s]
-You may have used the wrong order for inputs. `images` should be passed before `text`. The `images` and `text` inputs will be swapped. This behavior will be deprecated in transformers v4.47.
-Traceback (most recent call last):
-  File "/data/chy/online/test_idefics.py", line 35, in <module>
-    outputs = model.generate(**inputs, max_new_tokens=20, bad_words_ids=bad_words_ids,num_beams=1,length_penalty=1.0,
-  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/torch/utils/_contextlib.py", line 115, in decorate_context
-    return func(*args, **kwargs)
-  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/transformers/generation/utils.py", line 2215, in generate
-    result = self._sample(
-  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/transformers/generation/utils.py", line 3206, in _sample
-    outputs = self(**model_inputs, return_dict=True)
-  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1501, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/transformers/models/idefics/modeling_idefics.py", line 1601, in forward
-    outputs = self.model(
-  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/torch/nn/modules/module.py", line 1501, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/transformers/models/idefics/modeling_idefics.py", line 1223, in forward
-    attention_mask = self._update_causal_mask(
-  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/transformers/models/idefics/modeling_idefics.py", line 1398, in _update_causal_mask
-    causal_mask = self._prepare_4d_causal_attention_mask_with_cache_position(
-  File "/home/chy63/.conda/envs/openflamingo/lib/python3.9/site-packages/transformers/models/idefics/modeling_idefics.py", line 1465, in _prepare_4d_causal_attention_mask_with_cache_position
-    causal_mask = torch.triu(causal_mask, diagonal=1)
-RuntimeError: "triu_tril_cuda_template" not implemented for 'BFloat16'

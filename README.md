@@ -3,7 +3,6 @@ Our installation follow the installation of [OpenFlamingo](https://github.com/ml
 
 If you want to evaluate in-context classification performance on **OpenFlamingo-9B-vitl-mpt7b** ，the version of transformers is `4.33.2`.
 
-If you want to evaluate in-context classification performance on **idefics2-8b-base**，then you need to update transformers：
 
 ```
 pip install --upgrade transformers

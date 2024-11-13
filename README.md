@@ -1,11 +1,6 @@
 # Installation
 Our installation follow the installation of [OpenFlamingo](https://github.com/mlfoundations/open_flamingo), and the version of transformers is `4.33.2`.
 
-
-```
-pip install --upgrade transformers
-```
-
 # Usage
 
 ### 1.cache the image feature of dataset

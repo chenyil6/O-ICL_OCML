@@ -1,7 +1,5 @@
 # Installation
-Our installation follow the installation of [OpenFlamingo](https://github.com/mlfoundations/open_flamingo). 
-
-If you want to evaluate in-context classification performance on **OpenFlamingo-9B-vitl-mpt7b** ，the version of transformers is `4.33.2`.
+Our installation follow the installation of [OpenFlamingo](https://github.com/mlfoundations/open_flamingo), and the version of transformers is `4.33.2`.
 
 
 ```

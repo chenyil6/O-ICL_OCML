@@ -9,25 +9,22 @@ device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 
 # load clip model and processor
 embedding_model = CLIPModel.from_pretrained(
-    '/data1/chy/clip-vit-large-patch14', 
-    local_files_only=True
+    'openai/clip-vit-base-patch32'
 ).to(device)
 
 image_processor = AutoProcessor.from_pretrained(
-    '/data1/chy/clip-vit-large-patch14', 
-    local_files_only=True
+    'openai/clip-vit-base-patch32'
 )
 
 text_tokenizer = AutoTokenizer.from_pretrained(
-    '/data1/chy/clip-vit-large-patch14', 
-    local_files_only=True
+    'openai/clip-vit-base-patch32'
 )
 
 
 # initialize ImageNetDataset
 train_dataset = ImageNetDataset(
-    root=os.path.join("/data/hyh/imagenet/data", "train"),
-    index_file="./imagenet_class_indices.pkl"  # 指定索引文件路径
+    root=os.path.join("/path/to/imagenet/data", "train"),
+    index_file="./imagenet_class_indices.pkl"
 )
 
 def get_embedding(image):
@@ -71,12 +68,12 @@ print(f"the len of use_train_data(support set + data stream) is {len(use_train_d
 for sample in tqdm(use_train_data, desc="Processing train dataset"):
     preprocess_train(sample)
 
-with open('./train_idx2embed_quality_clip14.pkl', 'wb') as f:
+with open('./train_idx2embed_quality.pkl', 'wb') as f:
     pickle.dump(features_data, f)
 
 print("train data features are stored...")
 
-test_dataset = ImageNetDataset(os.path.join("/data/hyh/imagenet/data", "val"))
+test_dataset = ImageNetDataset(os.path.join("/path/to/imagenet/data", "val"))
 
 print(f"the len of test_data is {len(test_dataset)}")
 
@@ -91,7 +88,7 @@ def preprocess_val(sample):
 for data in tqdm(test_dataset, desc="Processing test dataset"):
     preprocess_val(data)
 
-with open('./val_idx2embed_clip14.pkl', 'wb') as f:
+with open('./val_idx2embed.pkl', 'wb') as f:
     pickle.dump(features_data_val, f)
 
 print("val data features are stored...")

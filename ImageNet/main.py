@@ -3,7 +3,7 @@ from inferencers import *
 import logging
 from transformers import AutoTokenizer, CLIPModel,AutoProcessor, AutoModelForVision2Seq
 import sys
-sys.path.append('/data/chy/online')
+#sys.path.append('/data/xx/online')
 from open_flamingo_v2.open_flamingo.src.factory import create_model_and_transforms
 from transformers import IdeficsForVisionText2Text, AutoProcessor
 import json
@@ -13,26 +13,29 @@ logging.getLogger("transformers").setLevel(logging.CRITICAL)
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="2")
+    parser.add_argument("--device", type=str, default="1")
     parser.add_argument(
         "--model",
         type=str,
         help="Model name. Currently only `OpenFlamingo` is supported.",
-        default="idefics_v1",# open_flamingo_9b;idefics_v2;open_flamingo_3b
+        default="open_flamingo_3b",# open_flamingo_9b;idefics_v2;open_flamingo_3b;idefics_v1
     )       
     parser.add_argument("--imagenet_root", type=str, default="/tmp")
     parser.add_argument("--dataset_mode", type=str, default="balanced") # balanced;imbalanced;
     parser.add_argument("--result_folder", type=str, default="./result")
-    parser.add_argument("--method", type=str, default="FewShot")# FewShot;Online_ICL;
+    parser.add_argument("--method", type=str, default="Online_ICL")# FewShot;Online_ICL;
     parser.add_argument("--seed", type=int, default=42)     
+    parser.add_argument("--stream", type=int, default=10000)    
+    parser.add_argument("--bank", type=str, default="initial") #initial; total
     # Hyper parameters for OnlineICL
     parser.add_argument("--select_strategy", type=str, default="cosine")# cosine;l2;random
-    parser.add_argument("--dnum", type=int, default=4) 
-    parser.add_argument("--update_strategy", type=str, default="noUpdate") # noUpdate;multi_step;cyclic;fixed;joint_rate
+    parser.add_argument("--target_select", type=str, default="least_similarity") # prototype; random; least_similarity;most_similarity
+    parser.add_argument("--dnum", type=int, default=4)
+    parser.add_argument("--update_strategy", type=str, default="fixed") # noUpdate;gradient_prototype;cyclic;fixed;multi_step
     parser.add_argument("--M", type=int, default=1000) 
     parser.add_argument("--catergory_num", type=int, default=100) # 测100类 还是 1k类
-    parser.add_argument("--batch_size", type=int, default=4)
-    parser.add_argument("--alpha", type=float, default=0.5)
+    parser.add_argument("--batch_size", type=int, default=1)
+    parser.add_argument("--alpha", type=float, default=0.2)
     arguments = parser.parse_args()
     return arguments
 
@@ -56,65 +59,37 @@ if __name__ == "__main__":
             precision="fp16",
             inference=True,
             device=device_set,
-            checkpoint_path="/data/share/OpenFlamingo-9B-vitl-mpt7b/checkpoint.pt"
+            checkpoint_path="/path/to/OpenFlamingo-9B-vitl-mpt7b/checkpoint.pt"
         )
     elif args.model == "open_flamingo_3b":
         model, image_processor, tokenizer = create_model_and_transforms(
             clip_vision_encoder_path="ViT-L-14",
             clip_vision_encoder_pretrained="openai",
-            lang_encoder_path="/data1/chy/mpt-1b-redpajama-200b/",
-            tokenizer_path="/data1/chy/mpt-1b-redpajama-200b/",
+            lang_encoder_path="anas-awadalla/mpt-1b-redpajama-200b",
+            tokenizer_path="anas-awadalla/mpt-1b-redpajama-200b",
             cross_attn_every_n_layers=1,
             precision="fp16",
             inference=True,
             device=device_set,
-            checkpoint_path="/data1/pyz/model_weight/OpenFlamingo-3B-vitl-mpt1b/checkpoint.pt"
+            checkpoint_path="/path/to/OpenFlamingo-3B-vitl-mpt1b/checkpoint.pt"
         )
-    elif args.model == "idefics_v2":
-        checkpoint = "/data1/pyz/model_weight/idefics2-8b-base"
-        model = AutoModelForVision2Seq.from_pretrained(checkpoint, local_files_only=True, torch_dtype=torch.float16, device_map="cuda") #.to(device_set)
-        model.eval()
-        processor = AutoProcessor.from_pretrained(checkpoint,do_image_splitting=False)
-        image_processor = processor.image_processor
-        tokenizer = processor.tokenizer
-    elif args.model == "idefics_v1":
-        checkpoint = "/data1/pyz/model_weight/idefics-9b"
-        model = IdeficsForVisionText2Text.from_pretrained(checkpoint, local_files_only=True, torch_dtype=torch.float16).to(device_set)
-        model.eval()
-        processor = AutoProcessor.from_pretrained(checkpoint)
-        image_processor = processor.image_processor
-        tokenizer = processor.tokenizer
     else:
         raise ValueError(f"Unsupported model type: {args.model}")
 
-    # embedding model
-    embedding_model = CLIPModel.from_pretrained('/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
-    embedding_processor = AutoProcessor.from_pretrained(
-            '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
-    embedding_tokenizer = AutoTokenizer.from_pretrained(
-            '/home/chy63/.cache/huggingface/hub/models--clip-vit-base-patch32',local_files_only=True)
-    print("load clip successfully...")
-
     if args.method == "Online_ICL":
         if args.model == "open_flamingo_9b":
-            inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device)
+            inferencer = Online_ICL(args, tokenizer, model, image_processor,device)
         elif args.model == "open_flamingo_3b":
-            inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device)
-        elif args.model == "idefics_v2":
-            inferencer = Online_ICL(args, tokenizer, model, image_processor, embedding_model, embedding_processor, embedding_tokenizer,device,processor=processor)
+            inferencer = Online_ICL(args, tokenizer, model, image_processor,device)
         else:
             raise ValueError(f"Unsupported model type: {args.model}")
 
         results, predictions = inferencer.run()
     elif args.method == "FewShot":
         if args.model == "open_flamingo_9b":
-            inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
+            inferencer = FewShot(args, tokenizer, model, image_processor,  device)
         elif args.model == "open_flamingo_3b":
-            inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device)
-        elif args.model == "idefics_v2":
-            inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
-        elif args.model == "idefics_v1":
-            inferencer = FewShot(args, tokenizer, model, image_processor, embedding_model, embedding_processor, device,processor=processor)
+            inferencer = FewShot(args, tokenizer, model, image_processor, device)
         else:
             raise ValueError(f"Unsupported model type: {args.model}")
         
@@ -124,20 +99,20 @@ if __name__ == "__main__":
         results = None
 
     results = {"device":args.device,"model": args.model,"dataset_mode":args.dataset_mode, "method": args.method, "select_strategy": args.select_strategy, "M": args.M,
-               "batch_size":args.batch_size,"update_strategy":args.update_strategy,"gradient":args.gradient,"catergory_num":args.catergory_num,"dnum":args.dnum,
-               "results": results}
+               "batch_size":args.batch_size,"update_strategy":args.update_strategy,"alpha":args.alpha,"catergory_num":args.catergory_num,"dnum":args.dnum,"target_select":args.target_select,
+               "stream":args.stream,"bank":args.bank,"results": results}
     print("-------------------------final-results-----------------------")
     print(results)
     
     if args.method == "Online_ICL": 
         res_file_last = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}-batch_size={args.batch_size}"
-                                                f"-update_strategy={args.update_strategy}-gradient={args.gradient}-shot={args.dnum}.json")
+                                                f"-update_strategy={args.update_strategy}-alpha={args.alpha}-shot={args.dnum}-target_select={args.target_select}-stream={args.stream}.json")
 
         with open(res_file_last, 'w') as json_file:
             json.dump(predictions, json_file, indent=4)
     else: # FewShot
         res_file = os.path.join(args.result_folder, f"{args.model}-{args.dataset_mode}-{args.method}-M={args.M}-select_strategy={args.select_strategy}-batch_size={args.batch_size}"
-                                                f"-update_strategy={args.update_strategy}.json")
+                                                f"-update_strategy={args.update_strategy}-shot={args.dnum}-bank={args.bank}.json")
 
         # load the prediction results to a json file
         with open(res_file, 'w') as json_file:

@@ -5,9 +5,9 @@ RESULTS_FILE="${RANDOM_ID}.json"
 
 nohup python -u open_flamingo/eval/evaluate_siir.py \
     --model "open_flamingo" \
-    --lm_path "/data/share/mpt-7b/" \
-    --lm_tokenizer_path "/data/share/mpt-7b/" \
-    --checkpoint_path "/data/share/OpenFlamingo-9B-vitl-mpt7b/checkpoint.pt" \
+    --lm_path "/path/to/mpt-7b/" \
+    --lm_tokenizer_path "/path/to/mpt-7b/" \
+    --checkpoint_path "/path/to/OpenFlamingo-9B-vitl-mpt7b/checkpoint.pt" \
     --vision_encoder_path "ViT-L-14" \
     --vision_encoder_pretrained 'openai' \
     --device $DEVICE \

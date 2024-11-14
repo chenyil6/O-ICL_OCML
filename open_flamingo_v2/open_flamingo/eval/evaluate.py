@@ -913,12 +913,6 @@ def evaluate_captioning(
         with open(f"{dataset_name}results_{random_uuid}.json", "w") as f:
             f.write(json.dumps(all_predictions, indent=4))
     style_type = control_signals["type"]
-    metrics = compute_cider(
-        result_path=f"{dataset_name}results_{random_uuid}.json",
-        annotations_path=f"/data/ll/StyleCaption/data/annotations/annotation_senticap_{style_type}.json"
-        if dataset_name == "coco"
-        else f"/data/ll/StyleCaption/data/annotations/annotation_flickr_{style_type}.json",
-    )
 
     # delete the temporary file
     # os.remove(results_path)
